@@ -1,0 +1,3 @@
+server4:
+  plugins:
+    - api_cache: https://local.openchami.cluster token https://local.openchami.cluster
