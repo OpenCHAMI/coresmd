@@ -45,6 +45,7 @@ func NewSmdClient(baseURL string) (*SmdClient, error) {
 
 	s := &SmdClient{
 		BaseURL: url,
+		Client:  &http.Client{},
 	}
 
 	return s, err
@@ -61,6 +62,9 @@ func (sc *SmdClient) UseCACert(path string) error {
 
 	if sc == nil {
 		return fmt.Errorf("SmdClient is nil")
+	}
+	if sc.Client == nil {
+		return fmt.Errorf("SmdClient's HTTP client is nil")
 	}
 
 	(*sc).Transport = &http.Transport{
@@ -83,8 +87,14 @@ func (sc *SmdClient) APIGet(path string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	if sc == nil {
+		return nil, fmt.Errorf("SmdClient is nil")
+	}
+	if sc.Client == nil {
+		return nil, fmt.Errorf("SmdClient's HTTP client is nil")
+	}
+
+	resp, err := sc.Client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute HTTP request: %w", err)
 	}
