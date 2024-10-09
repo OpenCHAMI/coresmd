@@ -38,6 +38,10 @@ func NewCache(duration string, client *SmdClient) (*Cache, error) {
 func (c *Cache) Refresh() error {
 	log.Info("initiating cache refresh")
 
+	if c == nil {
+		return fmt.Errorf("cache is nil")
+	}
+
 	// Fetch data
 	log.Debug("fetching EthernetInterfaces")
 	ethIfaceData, err := c.Client.APIGet("/hsm/v2/Inventory/EthernetInterfaces")

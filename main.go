@@ -52,7 +52,7 @@ func setup4(args ...string) (handler.Handler4, error) {
 	// Create new Cache using second argument (cache validity duration) and new SmdClient
 	// pointer
 	log.Debug("generating new Cache")
-	cache, err := NewCache(args[2], smdClient)
+	cache, err = NewCache(args[2], smdClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new cache: %w", err)
 	}
@@ -65,7 +65,7 @@ func setup4(args ...string) (handler.Handler4, error) {
 }
 
 func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
-	cache.Mutex.RLock()
+	(*cache).Mutex.RLock()
 	defer cache.Mutex.RUnlock()
 
 	hwAddr := req.ClientHWAddr.String()
