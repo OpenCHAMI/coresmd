@@ -33,7 +33,7 @@ type EthernetInterface struct {
 
 type Component struct {
 	ID   string `json:"ID"`
-	NID  string `json:"NID"`
+	NID  int64  `json:"NID"`
 	Type string `json:"Type"`
 }
 
