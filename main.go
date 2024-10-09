@@ -27,8 +27,8 @@ func setup6(args ...string) (handler.Handler6, error) {
 
 func setup4(args ...string) (handler.Handler4, error) {
 	// Ensure all required args were passed
-	if len(args) != 2 {
-		return nil, errors.New("expected 2 arguments: base URL, cache duration")
+	if len(args) != 3 {
+		return nil, errors.New("expected 2 arguments: base URL, CA certificate path, cache duration")
 	}
 
 	// Create new SmdClient using first argument (base URL)
@@ -38,10 +38,21 @@ func setup4(args ...string) (handler.Handler4, error) {
 		return nil, fmt.Errorf("failed to create new SMD client: %w", err)
 	}
 
+	// If nonempty, test that CA cert path exists
+	caCertPath := args[1]
+	if caCertPath != "" {
+		if err := smdClient.UseCACert(args[1]); err != nil {
+			return nil, fmt.Errorf("failed to set CA certificate: %w", err)
+		}
+		log.Infof("set CA certificate for SMD to the contents of %s", caCertPath)
+	} else {
+		log.Infof("CA certificate path was empty, not setting")
+	}
+
 	// Create new Cache using second argument (cache validity duration) and new SmdClient
 	// pointer
 	log.Debug("generating new Cache")
-	cache, err := NewCache(args[1], smdClient)
+	cache, err := NewCache(args[2], smdClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new cache: %w", err)
 	}

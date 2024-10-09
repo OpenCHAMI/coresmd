@@ -1,13 +1,23 @@
 package coresmd
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
+	"time"
+)
+
+var (
+	defaultTlsHandshakeTimeout   = 120 * time.Second
+	defaultResponseHeaderTimeout = 120 * time.Second
 )
 
 type SmdClient struct {
+	*http.Client
 	BaseURL *url.URL
 }
 
@@ -38,6 +48,32 @@ func NewSmdClient(baseURL string) (*SmdClient, error) {
 	}
 
 	return s, err
+}
+
+func (sc *SmdClient) UseCACert(path string) error {
+	cacert, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read CA certificate: %w", err)
+	}
+
+	certPool := x509.NewCertPool()
+	certPool.AppendCertsFromPEM(cacert)
+
+	if sc == nil {
+		return fmt.Errorf("SmdClient is nil")
+	}
+
+	(*sc).Transport = &http.Transport{
+		TLSClientConfig: &tls.Config{
+			RootCAs:            certPool,
+			InsecureSkipVerify: false,
+		},
+		DisableKeepAlives: true,
+		TLSHandshakeTimeout: defaultTlsHandshakeTimeout,
+		ResponseHeaderTimeout: defaultResponseHeaderTimeout,
+	}
+
+	return nil
 }
 
 func (sc *SmdClient) APIGet(path string) ([]byte, error) {
