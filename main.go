@@ -27,8 +27,8 @@ func setup6(args ...string) (handler.Handler6, error) {
 
 func setup4(args ...string) (handler.Handler4, error) {
 	// Ensure all required args were passed
-	if len(args) != 3 {
-		return nil, errors.New("expected 2 arguments: base URL, CA certificate path, cache duration")
+	if len(args) != 4 {
+		return nil, errors.New("expected 2 arguments: base URL, CA certificate path, cache duration, access token")
 	}
 
 	// Create new SmdClient using first argument (base URL)
@@ -57,6 +57,9 @@ func setup4(args ...string) (handler.Handler4, error) {
 		return nil, fmt.Errorf("failed to create new cache: %w", err)
 	}
 
+	// Set access token using fourth argument
+	accessToken = args[3]
+
 	cache.RefreshLoop()
 
 	log.Infof("coresmd plugin initialized with base URL %s and validity duration %s", smdClient.BaseURL, cache.Duration.String())
@@ -70,6 +73,7 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 
 	hwAddr := req.ClientHWAddr.String()
 	if ei, ok := cache.EthernetInterfaces[hwAddr]; ok {
+		// First, check EthernetInterfaces, which are mapped to Components
 		compId := ei.ComponentID
 		log.Debugf("EthernetInterface found in cache for hardware address %s with ID %s", hwAddr, compId)
 		if _, ok := cache.Components[compId]; !ok {
@@ -86,8 +90,15 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 		log.Infof("setting IP for %s to %s", hwAddr, ip)
 		resp.YourIPAddr = net.ParseIP(ip)
 		return resp, false
+	} else if rfe, ok := cache.RedfishEndpoints[hwAddr]; ok {
+		// If not an EthernetInterface, check RedfishEndpoints which are attached to BMCs
+		log.Debug("RedfishEndpoint found in cache for hardware address %s", hwAddr)
+		ip := rfe.IPAddr
+		log.Infof("setting IP for %s to %s", hwAddr, ip)
+		resp.YourIPAddr = net.ParseIP(ip)
+		return resp, false
 	}
 
-	log.Infof("no EthernetInterfaces were found in cache for hardware address %s", hwAddr)
+	log.Infof("no EthernetInterfaces or RedfishEndpoints were found in cache for hardware address %s", hwAddr)
 	return resp, true
 }

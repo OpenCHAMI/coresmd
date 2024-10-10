@@ -16,9 +16,16 @@ var (
 	defaultResponseHeaderTimeout = 120 * time.Second
 )
 
+var accessToken string
+
 type SmdClient struct {
 	*http.Client
 	BaseURL *url.URL
+}
+
+type RedfishEndpoint struct {
+	IPAddr string  `json:IPAddr`
+	MACAddr string `json:"MACAddr"`
 }
 
 type EthernetInterface struct {
@@ -86,6 +93,35 @@ func (sc *SmdClient) APIGet(path string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
+
+	if sc == nil {
+		return nil, fmt.Errorf("SmdClient is nil")
+	}
+	if sc.Client == nil {
+		return nil, fmt.Errorf("SmdClient's HTTP client is nil")
+	}
+
+	resp, err := sc.Client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	return data, nil
+}
+
+func (sc *SmdClient) APIGetToken(path string) ([]byte, error) {
+	endpoint := sc.BaseURL.JoinPath(path)
+	req, err := http.NewRequest("GET", endpoint.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
 	if sc == nil {
 		return nil, fmt.Errorf("SmdClient is nil")

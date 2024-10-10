@@ -14,6 +14,7 @@ type Cache struct {
 	LastUpdated time.Time
 	Mutex       sync.RWMutex
 
+	RedfishEndpoints   map[string]RedfishEndpoint
 	EthernetInterfaces map[string]EthernetInterface
 	Components         map[string]Component
 }
@@ -53,6 +54,11 @@ func (c *Cache) Refresh() error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch Components from SMD: %w", err)
 	}
+	log.Debug("fetching RedfishEndpoints")
+	rfeData, err := c.Client.APIGetToken("/hsm/v2/Inventory/RedfishEndpoints")
+	if err != nil {
+		return fmt.Errorf("failed to fetch RedfishEndpoints from SMD: %w", err)
+	}
 
 	// Unmarshal it
 	log.Debug("unmarshaling EthernetInterfaces")
@@ -69,6 +75,14 @@ func (c *Cache) Refresh() error {
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal Components data: %w", err)
 	}
+	log.Debug("unmarshaling RedfishEndpoints")
+	var rfeStruct struct {
+		RedfishEndpoints []RedfishEndpoint `json:"RedfishEndpoints"`
+	}
+	err = json.Unmarshal(rfeData, &rfeStruct)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal RedfishEndpoints data: %w", err)
+	}
 
 	// Organize it to be referenced via map
 	log.Debug("organizing EthernetInterfaces into map")
@@ -81,14 +95,21 @@ func (c *Cache) Refresh() error {
 	for _, comp := range compsStruct.Components {
 		compMap[comp.ID] = comp
 	}
+	log.Debug("organizing RedfishEndpoints into map")
+	rfeMap := make(map[string]RedfishEndpoint)
+	for _, rfe := range rfeStruct.RedfishEndpoints {
+		rfeMap[rfe.MACAddr] = rfe
+	}
 
 	// Update cache with info
+	log.Debug("updating cache with map data")
 	c.Mutex.Lock()
 	c.EthernetInterfaces = eiMap
 	c.Components = compMap
 	c.LastUpdated = time.Now()
 	c.Mutex.Unlock()
-	log.Infof("Cache updated with %d EthernetInterfaces and %d Components", len(eiMap), len(compMap))
+	log.Infof("Cache updated with %d RedfishEndpoints, %d EthernetInterfaces, and %d Components", len(rfeMap), len(eiMap), len(compMap))
+	log.Debugf("RedfishEndpoints: %v", rfeMap)
 	log.Debugf("EthernetInterfaces: %v", eiMap)
 	log.Debugf("Components: %v", compMap)
 
