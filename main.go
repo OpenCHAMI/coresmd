@@ -38,7 +38,7 @@ func setup4(args ...string) (handler.Handler4, error) {
 		return nil, fmt.Errorf("failed to create new SMD client: %w", err)
 	}
 
-	// If nonempty, test that CA cert path exists
+	// If nonempty, test that CA cert path exists (second argument)
 	caCertPath := args[1]
 	if caCertPath != "" {
 		if err := smdClient.UseCACert(args[1]); err != nil {
@@ -49,7 +49,7 @@ func setup4(args ...string) (handler.Handler4, error) {
 		log.Infof("CA certificate path was empty, not setting")
 	}
 
-	// Create new Cache using second argument (cache validity duration) and new SmdClient
+	// Create new Cache using third argument (cache validity duration) and new SmdClient
 	// pointer
 	log.Debug("generating new Cache")
 	cache, err = NewCache(args[2], smdClient)
