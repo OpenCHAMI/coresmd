@@ -1,6 +1,7 @@
 package coresmd
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -9,6 +10,7 @@ import (
 	"github.com/coredhcp/coredhcp/logger"
 	"github.com/coredhcp/coredhcp/plugins"
 	"github.com/insomniacslk/dhcp/dhcpv4"
+	"github.com/insomniacslk/dhcp/iana"
 )
 
 var log = logger.GetLogger("plugins/coresmd")
@@ -68,9 +70,13 @@ func setup4(args ...string) (handler.Handler4, error) {
 }
 
 func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
+	log.Debugf("HANDLER CALLED ON MESSAGE TYPE: req(%s), resp(%s)", req.MessageType(), resp.MessageType())
+	log.Debugf("REQUEST: %s", req.Summary())
+
 	(*cache).Mutex.RLock()
 	defer cache.Mutex.RUnlock()
 
+	// STEP 1: Assign IP address
 	hwAddr := req.ClientHWAddr.String()
 	if ei, ok := cache.EthernetInterfaces[hwAddr]; ok {
 		// First, check EthernetInterfaces, which are mapped to Components
@@ -88,17 +94,54 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 		log.Debugf("IP addresses available for hardware address %s (component %s): %v", hwAddr, compId, ei.IPAddresses)
 		ip := ei.IPAddresses[0].IPAddress
 		log.Infof("setting IP for %s to %s", hwAddr, ip)
+
+		// Set client IP address
 		resp.YourIPAddr = net.ParseIP(ip)
-		return resp, false
 	} else if rfe, ok := cache.RedfishEndpoints[hwAddr]; ok {
 		// If not an EthernetInterface, check RedfishEndpoints which are attached to BMCs
 		log.Debug("RedfishEndpoint found in cache for hardware address %s", hwAddr)
 		ip := rfe.IPAddr
 		log.Infof("setting IP for %s to %s", hwAddr, ip)
+
+		// Set client IP address
 		resp.YourIPAddr = net.ParseIP(ip)
-		return resp, false
+	} else {
+		log.Infof("no EthernetInterfaces or RedfishEndpoints were found in cache for hardware address %s", hwAddr)
+		return resp, true
 	}
 
-	log.Infof("no EthernetInterfaces or RedfishEndpoints were found in cache for hardware address %s", hwAddr)
-	return resp, true
+	// STEP 2: Send boot config
+	if cinfo := req.Options.Get(dhcpv4.OptionUserClassInformation); string(cinfo) != "iPXE" {
+		// BOOT STAGE 1: Send iPXE bootloader over TFTP
+		if req.Options.Has(dhcpv4.OptionClientSystemArchitectureType) {
+			var carch iana.Arch
+			carchBytes := req.Options.Get(dhcpv4.OptionClientSystemArchitectureType)
+			log.Debugf("client architecture of %s is %v (%q)", hwAddr, carchBytes, string(carchBytes))
+			carch = iana.Arch(binary.BigEndian.Uint16(carchBytes))
+			switch carch {
+			case iana.EFI_IA32:
+				// iPXE legacy 32-bit x86 bootloader
+				resp.Options.Update(dhcpv4.OptBootFileName("undionly.kpxe"))
+			case iana.EFI_X86_64:
+				// iPXE 64-bit x86 bootloader
+				resp.Options.Update(dhcpv4.OptBootFileName("ipxe.efi"))
+			default:
+				log.Errorf("no iPXE bootloader available for unknown architecture: %d (%s)", carch, carch.String())
+				return resp, true
+			}
+		} else {
+			log.Errorf("client did not present an architecture, unable to provide correct iPXE bootloader")
+			return resp, true
+		}
+	} else {
+		// BOOT STAGE 2: Send URL to BSS boot script
+		bssURL := bootScriptBaseURL.JoinPath("/boot/v1/bootscript")
+		bssURL.RawQuery = fmt.Sprintf("mac=%s", hwAddr)
+		resp.Options.Update(dhcpv4.OptBootFileName(bssURL.String()))
+	}
+
+	log.Debugf("resp (after): %v", resp)
+	log.Debugf("RESPONSE: %s", resp.Summary())
+
+	return resp, false
 }
