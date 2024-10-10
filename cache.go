@@ -49,16 +49,19 @@ func (c *Cache) Refresh() error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch EthernetInterfaces from SMD: %w", err)
 	}
+	log.Debug("EthernetInterfaces: " + string(ethIfaceData))
 	log.Debug("fetching Components")
 	compsData, err := c.Client.APIGet("/hsm/v2/State/Components")
 	if err != nil {
 		return fmt.Errorf("failed to fetch Components from SMD: %w", err)
 	}
+	log.Debug("Components: " + string(compsData))
 	log.Debug("fetching RedfishEndpoints")
 	rfeData, err := c.Client.APIGetToken("/hsm/v2/Inventory/RedfishEndpoints")
 	if err != nil {
 		return fmt.Errorf("failed to fetch RedfishEndpoints from SMD: %w", err)
 	}
+	log.Debug("RedfishEndpoints: " + string(rfeData))
 
 	// Unmarshal it
 	log.Debug("unmarshaling EthernetInterfaces")
