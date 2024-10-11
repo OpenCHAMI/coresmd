@@ -97,11 +97,13 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 		// First, check EthernetInterfaces, which are mapped to Components
 		compId := ei.ComponentID
 		log.Debugf("EthernetInterface found in cache for hardware address %s with ID %s", hwAddr, compId)
-		if _, ok := cache.Components[compId]; !ok {
+		comp, ok := cache.Components[compId]
+		if !ok {
 			log.Errorf("no Component %s found in cache for EthernetInterface hardware address %s", compId, hwAddr)
 			return resp, true
 		}
-		log.Debugf("Component found in cache with matching ID %s", compId)
+		compNid := comp.NID
+		log.Debugf("Component found in cache with matching ID %s (NID %d)", compId, compNid)
 		if len(ei.IPAddresses) == 0 {
 			log.Errorf("no IP addresses found for component %s with hardware address %s", compId, hwAddr)
 			return resp, true
@@ -112,6 +114,9 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 
 		// Set client IP address
 		resp.YourIPAddr = net.ParseIP(ip)
+
+		// Set client hostname
+		resp.Options.Update(dhcpv4.OptHostName(fmt.Sprintf("nid%03d", compNid)))
 	} else if rfe, ok := cache.RedfishEndpoints[hwAddr]; ok {
 		// If not an EthernetInterface, check RedfishEndpoints which are attached to BMCs
 		log.Debug("RedfishEndpoint found in cache for hardware address %s", hwAddr)
