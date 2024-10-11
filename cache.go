@@ -109,6 +109,7 @@ func (c *Cache) Refresh() error {
 	c.Mutex.Lock()
 	c.EthernetInterfaces = eiMap
 	c.Components = compMap
+	c.RedfishEndpoints = rfeMap
 	c.LastUpdated = time.Now()
 	c.Mutex.Unlock()
 	log.Infof("Cache updated with %d RedfishEndpoints, %d EthernetInterfaces, and %d Components", len(rfeMap), len(eiMap), len(compMap))
