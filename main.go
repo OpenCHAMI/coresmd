@@ -22,8 +22,11 @@ var Plugin = plugins.Plugin{
 	Setup4: setup4,
 }
 
-var cache *Cache
-var baseURL *url.URL
+var (
+	cache *Cache
+	baseURL *url.URL
+	bootScriptBaseURL *url.URL
+)
 
 func setup6(args ...string) (handler.Handler6, error) {
 	return nil, errors.New("coresmd does not currently support DHCPv6")
@@ -31,7 +34,7 @@ func setup6(args ...string) (handler.Handler6, error) {
 
 func setup4(args ...string) (handler.Handler4, error) {
 	// Ensure all required args were passed
-	if len(args) != 4 {
+	if len(args) != 5 {
 		return nil, errors.New("expected 2 arguments: base URL, CA certificate path, cache duration, access token")
 	}
 
@@ -44,10 +47,18 @@ func setup4(args ...string) (handler.Handler4, error) {
 	}
 	smdClient := NewSmdClient(baseURL)
 
-	// If nonempty, test that CA cert path exists (second argument)
-	caCertPath := args[1]
+	// Parse from the second argument the insecure URL used by iPXE clients
+	// to fetch their boot script via HTTP without a certificate
+	log.Debug("parsing boot script base URL")
+	bootScriptBaseURL, err = url.Parse(args[1])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse boot script base URL: %w", err)
+	}
+
+	// If nonempty, test that CA cert path exists (third argument)
+	caCertPath := args[2]
 	if caCertPath != "" {
-		if err := smdClient.UseCACert(args[1]); err != nil {
+		if err := smdClient.UseCACert(caCertPath); err != nil {
 			return nil, fmt.Errorf("failed to set CA certificate: %w", err)
 		}
 		log.Infof("set CA certificate for SMD to the contents of %s", caCertPath)
@@ -55,16 +66,16 @@ func setup4(args ...string) (handler.Handler4, error) {
 		log.Infof("CA certificate path was empty, not setting")
 	}
 
-	// Create new Cache using third argument (cache validity duration) and new SmdClient
+	// Create new Cache using fourth argument (cache validity duration) and new SmdClient
 	// pointer
 	log.Debug("generating new Cache")
-	cache, err = NewCache(args[2], smdClient)
+	cache, err = NewCache(args[3], smdClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new cache: %w", err)
 	}
 
-	// Set access token using fourth argument
-	accessToken = args[3]
+	// Set access token using fifth argument
+	accessToken = args[4]
 
 	cache.RefreshLoop()
 
