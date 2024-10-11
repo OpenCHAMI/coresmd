@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 
 	"github.com/coredhcp/coredhcp/handler"
 	"github.com/coredhcp/coredhcp/logger"
@@ -22,6 +23,7 @@ var Plugin = plugins.Plugin{
 }
 
 var cache *Cache
+var baseURL *url.URL
 
 func setup6(args ...string) (handler.Handler6, error) {
 	return nil, errors.New("coresmd does not currently support DHCPv6")
@@ -35,10 +37,12 @@ func setup4(args ...string) (handler.Handler4, error) {
 
 	// Create new SmdClient using first argument (base URL)
 	log.Debug("generating new SmdClient")
-	smdClient, err := NewSmdClient(args[0])
+	var err error
+	baseURL, err = url.Parse(args[0])
 	if err != nil {
-		return nil, fmt.Errorf("failed to create new SMD client: %w", err)
+		return nil, fmt.Errorf("failed to parse base URL: %w", err)
 	}
+	smdClient := NewSmdClient(baseURL)
 
 	// If nonempty, test that CA cert path exists (second argument)
 	caCertPath := args[1]

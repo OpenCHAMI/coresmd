@@ -44,18 +44,13 @@ type Component struct {
 	Type string `json:"Type"`
 }
 
-func NewSmdClient(baseURL string) (*SmdClient, error) {
-	url, err := url.Parse(baseURL)
-	if err != nil {
-		err = fmt.Errorf("failed to parse base URL: %w", err)
-	}
-
+func NewSmdClient(baseURL *url.URL) *SmdClient {
 	s := &SmdClient{
-		BaseURL: url,
+		BaseURL: baseURL,
 		Client:  &http.Client{},
 	}
 
-	return s, err
+	return s
 }
 
 func (sc *SmdClient) UseCACert(path string) error {
