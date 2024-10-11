@@ -1,3 +1,0 @@
-server4:
-  plugins:
-    - coresmd: https://foobar.openchami.cluster http://foobar.openchami.cluster:8081 "" 10s
