@@ -1,7 +1,6 @@
 package coresmd
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -11,7 +10,7 @@ import (
 	"github.com/coredhcp/coredhcp/logger"
 	"github.com/coredhcp/coredhcp/plugins"
 	"github.com/insomniacslk/dhcp/dhcpv4"
-	"github.com/insomniacslk/dhcp/iana"
+	"github.com/synackd/coresmd/pkg/ipxe"
 )
 
 type IfaceInfo struct {
@@ -118,7 +117,7 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	var terminate bool
 	if cinfo := req.Options.Get(dhcpv4.OptionUserClassInformation); string(cinfo) != "iPXE" {
 		// BOOT STAGE 1: Send iPXE bootloader over TFTP
-		resp, terminate = serveIPXEBootloader(req, resp)
+		resp, terminate = ipxe.ServeIPXEBootloader(log, req, resp)
 	} else {
 		// BOOT STAGE 2: Send URL to BSS boot script
 		bssURL := bootScriptBaseURL.JoinPath("/boot/v1/bootscript")

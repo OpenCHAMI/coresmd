@@ -3,7 +3,7 @@
 ################################################################################
 
 FROM golang:1.21 AS builder
-ARG CGO_ENABLED=0
+ARG CGO_ENABLED=1
 
 #
 # STEP 1: Clone coredhcp and build coredhcp-generator
@@ -32,7 +32,8 @@ RUN /coredhcp/coredhcp-generator \
 	-t /coredhcp/cmds/coredhcp-generator/coredhcp.go.template \
 	-f /coredhcp/cmds/coredhcp-generator/core-plugins.txt \
 	-o /coredhcp-coresmd/coredhcp.go \
-	github.com/synackd/coresmd
+	github.com/synackd/coresmd/coresmd \
+	github.com/synackd/coresmd/bootloop
 
 #
 # STEP 3: Build CoreDHCP
