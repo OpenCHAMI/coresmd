@@ -23,8 +23,8 @@ var Plugin = plugins.Plugin{
 }
 
 var (
-	cache *Cache
-	baseURL *url.URL
+	cache             *Cache
+	baseURL           *url.URL
 	bootScriptBaseURL *url.URL
 )
 

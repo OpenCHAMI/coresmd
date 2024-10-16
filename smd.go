@@ -24,7 +24,7 @@ type SmdClient struct {
 }
 
 type RedfishEndpoint struct {
-	IPAddr string  `json:IPAddr`
+	IPAddr  string `json:IPAddr`
 	MACAddr string `json:"MACAddr"`
 }
 
@@ -74,8 +74,8 @@ func (sc *SmdClient) UseCACert(path string) error {
 			RootCAs:            certPool,
 			InsecureSkipVerify: false,
 		},
-		DisableKeepAlives: true,
-		TLSHandshakeTimeout: defaultTlsHandshakeTimeout,
+		DisableKeepAlives:     true,
+		TLSHandshakeTimeout:   defaultTlsHandshakeTimeout,
 		ResponseHeaderTimeout: defaultResponseHeaderTimeout,
 	}
 
