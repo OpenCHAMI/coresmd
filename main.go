@@ -34,8 +34,8 @@ func setup6(args ...string) (handler.Handler6, error) {
 
 func setup4(args ...string) (handler.Handler4, error) {
 	// Ensure all required args were passed
-	if len(args) != 5 {
-		return nil, errors.New("expected 2 arguments: base URL, CA certificate path, cache duration, access token")
+	if len(args) != 4 {
+		return nil, errors.New("expected 4 arguments: base URL, boot script base URL, CA certificate path, cache duration")
 	}
 
 	// Create new SmdClient using first argument (base URL)
@@ -74,9 +74,6 @@ func setup4(args ...string) (handler.Handler4, error) {
 		return nil, fmt.Errorf("failed to create new cache: %w", err)
 	}
 
-	// Set access token using fifth argument
-	accessToken = args[4]
-
 	cache.RefreshLoop()
 
 	log.Infof("coresmd plugin initialized with base URL %s and validity duration %s", smdClient.BaseURL, cache.Duration.String())
@@ -93,41 +90,36 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 
 	// STEP 1: Assign IP address
 	hwAddr := req.ClientHWAddr.String()
-	if ei, ok := cache.EthernetInterfaces[hwAddr]; ok {
-		// First, check EthernetInterfaces, which are mapped to Components
-		compId := ei.ComponentID
-		log.Debugf("EthernetInterface found in cache for hardware address %s with ID %s", hwAddr, compId)
-		comp, ok := cache.Components[compId]
-		if !ok {
-			log.Errorf("no Component %s found in cache for EthernetInterface hardware address %s", compId, hwAddr)
-			return resp, true
-		}
-		compNid := comp.NID
-		log.Debugf("Component found in cache with matching ID %s (NID %d)", compId, compNid)
-		if len(ei.IPAddresses) == 0 {
-			log.Errorf("no IP addresses found for component %s with hardware address %s", compId, hwAddr)
-			return resp, true
-		}
-		log.Debugf("IP addresses available for hardware address %s (component %s): %v", hwAddr, compId, ei.IPAddresses)
-		ip := ei.IPAddresses[0].IPAddress
-		log.Infof("setting IP for %s to %s", hwAddr, ip)
-
-		// Set client IP address
-		resp.YourIPAddr = net.ParseIP(ip)
-
-		// Set client hostname
-		resp.Options.Update(dhcpv4.OptHostName(fmt.Sprintf("nid%03d", compNid)))
-	} else if rfe, ok := cache.RedfishEndpoints[hwAddr]; ok {
-		// If not an EthernetInterface, check RedfishEndpoints which are attached to BMCs
-		log.Debug("RedfishEndpoint found in cache for hardware address %s", hwAddr)
-		ip := rfe.IPAddr
-		log.Infof("setting IP for %s to %s", hwAddr, ip)
-
-		// Set client IP address
-		resp.YourIPAddr = net.ParseIP(ip)
-	} else {
-		log.Infof("no EthernetInterfaces or RedfishEndpoints were found in cache for hardware address %s", hwAddr)
+	ei, ok := cache.EthernetInterfaces[hwAddr]
+	if !ok {
+		log.Infof("no EthernetInterfaces were found in cache for hardware address %s", hwAddr)
 		return resp, true
+	}
+
+	// First, check EthernetInterfaces, which are mapped to Components
+	compId := ei.ComponentID
+	log.Debugf("EthernetInterface found in cache for hardware address %s with ID %s", hwAddr, compId)
+	comp, ok := cache.Components[compId]
+	if !ok {
+		log.Errorf("no Component %s found in cache for EthernetInterface hardware address %s", compId, hwAddr)
+		return resp, true
+	}
+	compType := comp.Type
+	log.Debugf("Component of type %s found in cache with matching ID %s", compType, compId)
+	if len(ei.IPAddresses) == 0 {
+		log.Errorf("no IP addresses found for component %s of type %s with hardware address %s", compId, compType, hwAddr)
+		return resp, true
+	}
+	log.Debugf("IP addresses available for hardware address %s (component %s of type %s): %v", hwAddr, compId, compType, ei.IPAddresses)
+	ip := ei.IPAddresses[0].IPAddress
+	log.Infof("setting IP for %s (%s) to %s", hwAddr, compType, ip)
+
+	// Set client IP address
+	resp.YourIPAddr = net.ParseIP(ip)
+
+	// Set client hostname
+	if compType == "Node" {
+		resp.Options.Update(dhcpv4.OptHostName(fmt.Sprintf("nid%03d", comp.NID)))
 	}
 
 	// STEP 2: Send boot config
