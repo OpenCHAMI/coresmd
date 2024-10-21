@@ -14,6 +14,14 @@ import (
 	"github.com/insomniacslk/dhcp/iana"
 )
 
+type IfaceInfo struct {
+	CompID  string
+	CompNID int64
+	Type    string
+	MAC     string
+	IPList  []net.IP
+}
+
 var log = logger.GetLogger("plugins/coresmd")
 
 var Plugin = plugins.Plugin{
@@ -85,75 +93,102 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	log.Debugf("HANDLER CALLED ON MESSAGE TYPE: req(%s), resp(%s)", req.MessageType(), resp.MessageType())
 	log.Debugf("REQUEST: %s", req.Summary())
 
+	// Make sure cache doesn't get updated while reading
 	(*cache).Mutex.RLock()
 	defer cache.Mutex.RUnlock()
 
 	// STEP 1: Assign IP address
 	hwAddr := req.ClientHWAddr.String()
-	ei, ok := cache.EthernetInterfaces[hwAddr]
-	if !ok {
-		log.Infof("no EthernetInterfaces were found in cache for hardware address %s", hwAddr)
+	ifaceInfo, err := lookupMAC(hwAddr)
+	if err != nil {
+		log.Errorf("IP lookup failed: %v", err)
 		return resp, true
 	}
-
-	// First, check EthernetInterfaces, which are mapped to Components
-	compId := ei.ComponentID
-	log.Debugf("EthernetInterface found in cache for hardware address %s with ID %s", hwAddr, compId)
-	comp, ok := cache.Components[compId]
-	if !ok {
-		log.Errorf("no Component %s found in cache for EthernetInterface hardware address %s", compId, hwAddr)
-		return resp, true
-	}
-	compType := comp.Type
-	log.Debugf("Component of type %s found in cache with matching ID %s", compType, compId)
-	if len(ei.IPAddresses) == 0 {
-		log.Errorf("no IP addresses found for component %s of type %s with hardware address %s", compId, compType, hwAddr)
-		return resp, true
-	}
-	log.Debugf("IP addresses available for hardware address %s (component %s of type %s): %v", hwAddr, compId, compType, ei.IPAddresses)
-	ip := ei.IPAddresses[0].IPAddress
-	log.Infof("setting IP for %s (%s) to %s", hwAddr, compType, ip)
-
-	// Set client IP address
-	resp.YourIPAddr = net.ParseIP(ip)
+	assignedIP := ifaceInfo.IPList[0].To4()
+	log.Infof("assigning %s to %s (%s)", assignedIP, ifaceInfo.MAC, ifaceInfo.Type)
+	resp.YourIPAddr = assignedIP
 
 	// Set client hostname
-	if compType == "Node" {
-		resp.Options.Update(dhcpv4.OptHostName(fmt.Sprintf("nid%03d", comp.NID)))
+	if ifaceInfo.Type == "Node" {
+		resp.Options.Update(dhcpv4.OptHostName(fmt.Sprintf("nid%03d", ifaceInfo.CompNID)))
 	}
 
 	// STEP 2: Send boot config
+	var terminate bool
 	if cinfo := req.Options.Get(dhcpv4.OptionUserClassInformation); string(cinfo) != "iPXE" {
 		// BOOT STAGE 1: Send iPXE bootloader over TFTP
-		if req.Options.Has(dhcpv4.OptionClientSystemArchitectureType) {
-			var carch iana.Arch
-			carchBytes := req.Options.Get(dhcpv4.OptionClientSystemArchitectureType)
-			log.Debugf("client architecture of %s is %v (%q)", hwAddr, carchBytes, string(carchBytes))
-			carch = iana.Arch(binary.BigEndian.Uint16(carchBytes))
-			switch carch {
-			case iana.EFI_IA32:
-				// iPXE legacy 32-bit x86 bootloader
-				resp.Options.Update(dhcpv4.OptBootFileName("undionly.kpxe"))
-			case iana.EFI_X86_64:
-				// iPXE 64-bit x86 bootloader
-				resp.Options.Update(dhcpv4.OptBootFileName("ipxe.efi"))
-			default:
-				log.Errorf("no iPXE bootloader available for unknown architecture: %d (%s)", carch, carch.String())
-				return resp, true
-			}
-		} else {
-			log.Errorf("client did not present an architecture, unable to provide correct iPXE bootloader")
-			return resp, true
-		}
+		resp, terminate = serveIPXEBootloader(req, resp)
 	} else {
 		// BOOT STAGE 2: Send URL to BSS boot script
 		bssURL := bootScriptBaseURL.JoinPath("/boot/v1/bootscript")
 		bssURL.RawQuery = fmt.Sprintf("mac=%s", hwAddr)
 		resp.Options.Update(dhcpv4.OptBootFileName(bssURL.String()))
+		terminate = false
 	}
 
 	log.Debugf("resp (after): %v", resp)
 	log.Debugf("RESPONSE: %s", resp.Summary())
 
-	return resp, false
+	return resp, terminate
+}
+
+func serveIPXEBootloader(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
+	if req.Options.Has(dhcpv4.OptionClientSystemArchitectureType) {
+		var carch iana.Arch
+		carchBytes := req.Options.Get(dhcpv4.OptionClientSystemArchitectureType)
+		log.Debugf("client architecture of %s is %v (%q)", req.ClientHWAddr, carchBytes, string(carchBytes))
+		carch = iana.Arch(binary.BigEndian.Uint16(carchBytes))
+		switch carch {
+		case iana.EFI_IA32:
+			// iPXE legacy 32-bit x86 bootloader
+			resp.Options.Update(dhcpv4.OptBootFileName("undionly.kpxe"))
+			return resp, false
+		case iana.EFI_X86_64:
+			// iPXE 64-bit x86 bootloader
+			resp.Options.Update(dhcpv4.OptBootFileName("ipxe.efi"))
+			return resp, false
+		default:
+			log.Errorf("no iPXE bootloader available for unknown architecture: %d (%s)", carch, carch.String())
+			return resp, true
+		}
+	} else {
+		log.Errorf("client did not present an architecture, unable to provide correct iPXE bootloader")
+		return resp, true
+	}
+}
+
+func lookupMAC(mac string) (IfaceInfo, error) {
+	var ii IfaceInfo
+
+	// Match MAC address with EthernetInterface
+	ei, ok := cache.EthernetInterfaces[mac]
+	if !ok {
+		return ii, fmt.Errorf("no EthernetInterfaces were found in cache for hardware address %s", mac)
+	}
+	ii.MAC = mac
+
+	// If found, make sure Component exists with ID matching to EthernetInterface ID
+	ii.CompID = ei.ComponentID
+	log.Debugf("EthernetInterface found in cache for hardware address %s with ID %s", ii.MAC, ii.CompID)
+	comp, ok := cache.Components[ii.CompID]
+	if !ok {
+		return ii, fmt.Errorf("no Component %s found in cache for EthernetInterface hardware address %s", ii.CompID, ii.MAC)
+	}
+	ii.Type = comp.Type
+	log.Debugf("matching Component of type %s with ID %s found in cache for hardware address %s", ii.Type, ii.CompID, ii.MAC)
+	if ii.Type == "Node" {
+		ii.CompNID = comp.NID
+	}
+	if len(ei.IPAddresses) == 0 {
+		return ii, fmt.Errorf("EthernetInterface for Component %s (type %s) contains no IP addresses for hardware address %s", ii.CompID, ii.Type, ii.MAC)
+	}
+	log.Debugf("IP addresses available for hardware address %s (Component %s of type %s): %v", ii.MAC, ii.CompID, ii.Type, ei.IPAddresses)
+	var ipList []net.IP
+	for _, ipStr := range ei.IPAddresses {
+		ip := net.ParseIP(ipStr.IPAddress)
+		ipList = append(ipList, ip)
+	}
+	ii.IPList = ipList
+
+	return ii, nil
 }
