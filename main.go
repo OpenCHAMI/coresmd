@@ -103,7 +103,7 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	if err != nil {
 		log.Errorf("IP lookup failed: %v", err)
 		debugResponse(resp)
-		return resp, true
+		return resp, false
 	}
 	assignedIP := ifaceInfo.IPList[0].To4()
 	log.Infof("assigning %s to %s (%s)", assignedIP, ifaceInfo.MAC, ifaceInfo.Type)
