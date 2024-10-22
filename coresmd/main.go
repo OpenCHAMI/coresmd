@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"time"
 
 	"github.com/coredhcp/coredhcp/handler"
 	"github.com/coredhcp/coredhcp/logger"
@@ -33,6 +34,7 @@ var (
 	cache             *Cache
 	baseURL           *url.URL
 	bootScriptBaseURL *url.URL
+	leaseDuration     time.Duration
 )
 
 func setup6(args ...string) (handler.Handler6, error) {
@@ -41,8 +43,8 @@ func setup6(args ...string) (handler.Handler6, error) {
 
 func setup4(args ...string) (handler.Handler4, error) {
 	// Ensure all required args were passed
-	if len(args) != 4 {
-		return nil, errors.New("expected 4 arguments: base URL, boot script base URL, CA certificate path, cache duration")
+	if len(args) != 5 {
+		return nil, errors.New("expected 5 arguments: base URL, boot script base URL, CA certificate path, cache duration, lease duration")
 	}
 
 	// Create new SmdClient using first argument (base URL)
@@ -81,6 +83,13 @@ func setup4(args ...string) (handler.Handler4, error) {
 		return nil, fmt.Errorf("failed to create new cache: %w", err)
 	}
 
+	// Set lease duration from fifth argument
+	log.Debug("setting lease duration")
+	leaseDuration, err = time.ParseDuration(args[4])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse lease duration: %w", err)
+	}
+
 	cache.RefreshLoop()
 
 	log.Infof("coresmd plugin initialized with base URL %s and validity duration %s", smdClient.BaseURL, cache.Duration.String())
@@ -107,6 +116,9 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	assignedIP := ifaceInfo.IPList[0].To4()
 	log.Infof("assigning %s to %s (%s)", assignedIP, ifaceInfo.MAC, ifaceInfo.Type)
 	resp.YourIPAddr = assignedIP
+
+	// Set lease time
+	resp.Options.Update(dhcpv4.OptIPAddressLeaseTime(leaseDuration))
 
 	// Set client hostname
 	if ifaceInfo.Type == "Node" {
