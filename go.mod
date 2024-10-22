@@ -6,6 +6,7 @@ require (
 	github.com/coredhcp/coredhcp v0.0.0-20240908184240-576af8676ffa
 	github.com/insomniacslk/dhcp v0.0.0-20240829085014-a3a4c1f04475
 	github.com/mattn/go-sqlite3 v1.14.22
+	github.com/sirupsen/logrus v1.9.3
 )
 
 require (
@@ -25,7 +26,6 @@ require (
 	github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
-	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.6.0 // indirect

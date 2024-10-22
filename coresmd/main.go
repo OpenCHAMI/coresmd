@@ -11,6 +11,7 @@ import (
 	"github.com/coredhcp/coredhcp/logger"
 	"github.com/coredhcp/coredhcp/plugins"
 	"github.com/insomniacslk/dhcp/dhcpv4"
+	"github.com/synackd/coresmd/pkg/debug"
 	"github.com/synackd/coresmd/pkg/ipxe"
 )
 
@@ -99,7 +100,7 @@ func setup4(args ...string) (handler.Handler4, error) {
 
 func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	log.Debugf("HANDLER CALLED ON MESSAGE TYPE: req(%s), resp(%s)", req.MessageType(), resp.MessageType())
-	debugRequest(req)
+	debug.DebugRequest(log, req)
 
 	// Make sure cache doesn't get updated while reading
 	(*cache).Mutex.RLock()
@@ -110,7 +111,6 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	ifaceInfo, err := lookupMAC(hwAddr)
 	if err != nil {
 		log.Errorf("IP lookup failed: %v", err)
-		debugResponse(resp)
 		return resp, false
 	}
 	assignedIP := ifaceInfo.IPList[0].To4()
@@ -138,17 +138,9 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 		terminate = false
 	}
 
-	debugResponse(resp)
+	debug.DebugResponse(log, resp)
 
 	return resp, terminate
-}
-
-func debugRequest(req *dhcpv4.DHCPv4) {
-	log.Debugf("REQUEST: %v", req.Summary())
-}
-
-func debugResponse(resp *dhcpv4.DHCPv4) {
-	log.Debugf("RESPONSE: %v", resp.Summary())
 }
 
 func lookupMAC(mac string) (IfaceInfo, error) {
