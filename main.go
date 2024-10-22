@@ -91,7 +91,7 @@ func setup4(args ...string) (handler.Handler4, error) {
 
 func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	log.Debugf("HANDLER CALLED ON MESSAGE TYPE: req(%s), resp(%s)", req.MessageType(), resp.MessageType())
-	log.Debugf("REQUEST: %s", req.Summary())
+	debugRequest(req)
 
 	// Make sure cache doesn't get updated while reading
 	(*cache).Mutex.RLock()
@@ -102,6 +102,7 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	ifaceInfo, err := lookupMAC(hwAddr)
 	if err != nil {
 		log.Errorf("IP lookup failed: %v", err)
+		debugResponse(resp)
 		return resp, true
 	}
 	assignedIP := ifaceInfo.IPList[0].To4()
@@ -126,35 +127,17 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 		terminate = false
 	}
 
-	log.Debugf("resp (after): %v", resp)
-	log.Debugf("RESPONSE: %s", resp.Summary())
+	debugResponse(resp)
 
 	return resp, terminate
 }
 
-func serveIPXEBootloader(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
-	if req.Options.Has(dhcpv4.OptionClientSystemArchitectureType) {
-		var carch iana.Arch
-		carchBytes := req.Options.Get(dhcpv4.OptionClientSystemArchitectureType)
-		log.Debugf("client architecture of %s is %v (%q)", req.ClientHWAddr, carchBytes, string(carchBytes))
-		carch = iana.Arch(binary.BigEndian.Uint16(carchBytes))
-		switch carch {
-		case iana.EFI_IA32:
-			// iPXE legacy 32-bit x86 bootloader
-			resp.Options.Update(dhcpv4.OptBootFileName("undionly.kpxe"))
-			return resp, false
-		case iana.EFI_X86_64:
-			// iPXE 64-bit x86 bootloader
-			resp.Options.Update(dhcpv4.OptBootFileName("ipxe.efi"))
-			return resp, false
-		default:
-			log.Errorf("no iPXE bootloader available for unknown architecture: %d (%s)", carch, carch.String())
-			return resp, true
-		}
-	} else {
-		log.Errorf("client did not present an architecture, unable to provide correct iPXE bootloader")
-		return resp, true
-	}
+func debugRequest(req *dhcpv4.DHCPv4) {
+	log.Debugf("REQUEST: %v", req.Summary())
+}
+
+func debugResponse(resp *dhcpv4.DHCPv4) {
+	log.Debugf("RESPONSE: %v", resp.Summary())
 }
 
 func lookupMAC(mac string) (IfaceInfo, error) {
