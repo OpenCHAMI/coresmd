@@ -158,7 +158,7 @@ func (p *PluginState) Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) 
 		record = &rec
 		resp.YourIPAddr = record.IP
 		resp.Options.Update(dhcpv4.OptIPAddressLeaseTime(p.LeaseTime.Round(time.Second)))
-		log.Printf("assigning new IP address %s for MAC %s", record.IP, req.ClientHWAddr.String())
+		log.Infof("assigning %s to %s with a lease duration of %s", record.IP, req.ClientHWAddr.String(), p.LeaseTime)
 
 		if string(cinfo) != "iPXE" {
 			// BOOT STAGE 1: Send iPXE bootloader over TFTP

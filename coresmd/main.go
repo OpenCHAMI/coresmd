@@ -114,11 +114,11 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 		return resp, false
 	}
 	assignedIP := ifaceInfo.IPList[0].To4()
-	log.Infof("assigning %s to %s (%s)", assignedIP, ifaceInfo.MAC, ifaceInfo.Type)
 	resp.YourIPAddr = assignedIP
 
 	// Set lease time
 	resp.Options.Update(dhcpv4.OptIPAddressLeaseTime(leaseDuration))
+	log.Infof("assigning %s to %s (%s) with a lease duration of %s", assignedIP, ifaceInfo.MAC, ifaceInfo.Type, leaseDuration)
 
 	// Set client hostname
 	if ifaceInfo.Type == "Node" {
