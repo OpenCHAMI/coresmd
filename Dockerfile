@@ -39,7 +39,7 @@ RUN /coredhcp/coredhcp-generator \
 # STEP 3: Build CoreDHCP
 #
 
-RUN go mod init t.t/coredhcp
+RUN go mod init coredhcp
 RUN go mod edit -replace=github.com/coredhcp/coredhcp=/coredhcp
 RUN go mod edit -replace=github.com/synackd/coresmd=/coresmd
 RUN go mod tidy
