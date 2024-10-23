@@ -49,30 +49,33 @@ It is recommended to do this within a clean directory.
 1. Run the generator to generate the CoreDHCP source file.
 
    ```
-   ./coredhcp-generator -f core-plugins.txt -t coredhcp.go.template -o ../../../coresmd/coredhcp.go github.com/synackd/coresmd
+   ./coredhcp-generator -f core-plugins.txt -t coredhcp.go.template -o ../../../coresmd/coredhcp.go \
+     github.com/synackd/coresmd/coresmd \
+     github.com/synackd/coresmd/bootloop
    ```
 
    You should see output similar to the following:
 
    ```
-   2024/10/11 16:18:47 Generating output file '../../../coresmd/coredhcp.go' with 16 plugin(s):
-   2024/10/11 16:18:47   1) github.com/coredhcp/coredhcp/plugins/searchdomains
-   2024/10/11 16:18:47   2) github.com/coredhcp/coredhcp/plugins/autoconfigure
-   2024/10/11 16:18:47   3) github.com/coredhcp/coredhcp/plugins/leasetime
-   2024/10/11 16:18:47   4) github.com/coredhcp/coredhcp/plugins/mtu
-   2024/10/11 16:18:47   5) github.com/coredhcp/coredhcp/plugins/serverid
-   2024/10/11 16:18:47   6) github.com/synackd/coresmd
-   2024/10/11 16:18:47   7) github.com/coredhcp/coredhcp/plugins/ipv6only
-   2024/10/11 16:18:47   8) github.com/coredhcp/coredhcp/plugins/staticroute
-   2024/10/11 16:18:47   9) github.com/coredhcp/coredhcp/plugins/file
-   2024/10/11 16:18:47  10) github.com/coredhcp/coredhcp/plugins/prefix
-   2024/10/11 16:18:47  11) github.com/coredhcp/coredhcp/plugins/range
-   2024/10/11 16:18:47  12) github.com/coredhcp/coredhcp/plugins/router
-   2024/10/11 16:18:47  13) github.com/coredhcp/coredhcp/plugins/dns
-   2024/10/11 16:18:47  14) github.com/coredhcp/coredhcp/plugins/netmask
-   2024/10/11 16:18:47  15) github.com/coredhcp/coredhcp/plugins/nbp
-   2024/10/11 16:18:47  16) github.com/coredhcp/coredhcp/plugins/sleep
-   2024/10/11 16:18:47 Generated file '../../../coresmd/coredhcp.go'. You can build it by running 'go build' in the output directory.
+   2024/10/23 22:57:51 Generating output file '../../../coresmd/coredhcp.go' with 17 plugin(s):
+   2024/10/23 22:57:51   1) github.com/synackd/coresmd/bootloop
+   2024/10/23 22:57:51   2) github.com/coredhcp/coredhcp/plugins/autoconfigure
+   2024/10/23 22:57:51   3) github.com/coredhcp/coredhcp/plugins/file
+   2024/10/23 22:57:51   4) github.com/coredhcp/coredhcp/plugins/prefix
+   2024/10/23 22:57:51   5) github.com/coredhcp/coredhcp/plugins/leasetime
+   2024/10/23 22:57:51   6) github.com/coredhcp/coredhcp/plugins/mtu
+   2024/10/23 22:57:51   7) github.com/coredhcp/coredhcp/plugins/nbp
+   2024/10/23 22:57:51   8) github.com/coredhcp/coredhcp/plugins/router
+   2024/10/23 22:57:51   9) github.com/coredhcp/coredhcp/plugins/searchdomains
+   2024/10/23 22:57:51  10) github.com/coredhcp/coredhcp/plugins/dns
+   2024/10/23 22:57:51  11) github.com/coredhcp/coredhcp/plugins/netmask
+   2024/10/23 22:57:51  12) github.com/coredhcp/coredhcp/plugins/range
+   2024/10/23 22:57:51  13) github.com/coredhcp/coredhcp/plugins/serverid
+   2024/10/23 22:57:51  14) github.com/coredhcp/coredhcp/plugins/sleep
+   2024/10/23 22:57:51  15) github.com/coredhcp/coredhcp/plugins/staticroute
+   2024/10/23 22:57:51  16) github.com/synackd/coresmd/coresmd
+   2024/10/23 22:57:51  17) github.com/coredhcp/coredhcp/plugins/ipv6only
+   2024/10/23 22:57:51 Generated file '../../../coresmd/coredhcp.go'. You can build it by running 'go build' in the output directory.
    ../../../coresmd
    ```
 
@@ -83,6 +86,13 @@ It is recommended to do this within a clean directory.
    go mod init coredhcp   # the module name doesn't matter
    go mod edit -go=1.21
    go mod edit -replace=github.com/coredhcp/coredhcp=../coredhcp
+   ```
+   **Only if you have coresmd checked out locally**
+   ```
+   go mod edit -replace=github.com/synackd/coresmd=<path_to_checkout>
+   ```
+   Finally:
+   ```
    go mod tidy
    ```
 
