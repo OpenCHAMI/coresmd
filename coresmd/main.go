@@ -126,21 +126,19 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	}
 
 	// STEP 2: Send boot config
-	var terminate bool
 	if cinfo := req.Options.Get(dhcpv4.OptionUserClassInformation); string(cinfo) != "iPXE" {
 		// BOOT STAGE 1: Send iPXE bootloader over TFTP
-		resp, terminate = ipxe.ServeIPXEBootloader(log, req, resp)
+		resp, _ = ipxe.ServeIPXEBootloader(log, req, resp)
 	} else {
 		// BOOT STAGE 2: Send URL to BSS boot script
 		bssURL := bootScriptBaseURL.JoinPath("/boot/v1/bootscript")
 		bssURL.RawQuery = fmt.Sprintf("mac=%s", hwAddr)
 		resp.Options.Update(dhcpv4.OptBootFileName(bssURL.String()))
-		terminate = true
 	}
 
 	debug.DebugResponse(log, resp)
 
-	return resp, terminate
+	return resp, true
 }
 
 func lookupMAC(mac string) (IfaceInfo, error) {
