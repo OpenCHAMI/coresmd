@@ -18,17 +18,17 @@ func ServeIPXEBootloader(l *logrus.Entry, req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHC
 		case iana.EFI_IA32:
 			// iPXE legacy 32-bit x86 bootloader
 			resp.Options.Update(dhcpv4.OptBootFileName("undionly.kpxe"))
-			return resp, false
+			return resp, true
 		case iana.EFI_X86_64:
 			// iPXE 64-bit x86 bootloader
 			resp.Options.Update(dhcpv4.OptBootFileName("ipxe.efi"))
-			return resp, false
+			return resp, true
 		default:
 			l.Errorf("no iPXE bootloader available for unknown architecture: %d (%s)", carch, carch.String())
-			return resp, true
+			return resp, false
 		}
 	} else {
 		l.Errorf("client did not present an architecture, unable to provide correct iPXE bootloader")
-		return resp, true
+		return resp, false
 	}
 }
