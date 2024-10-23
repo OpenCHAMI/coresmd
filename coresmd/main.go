@@ -135,7 +135,7 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 		bssURL := bootScriptBaseURL.JoinPath("/boot/v1/bootscript")
 		bssURL.RawQuery = fmt.Sprintf("mac=%s", hwAddr)
 		resp.Options.Update(dhcpv4.OptBootFileName(bssURL.String()))
-		terminate = false
+		terminate = true
 	}
 
 	debug.DebugResponse(log, resp)
