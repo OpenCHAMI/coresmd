@@ -1,4 +1,4 @@
-module github.com/synackd/coresmd
+module github.com/OpenCHAMI/coresmd
 
 go 1.21
 

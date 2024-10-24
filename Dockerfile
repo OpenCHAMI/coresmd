@@ -21,7 +21,7 @@ RUN go build ./cmds/coredhcp-generator
 
 WORKDIR /coresmd
 COPY go.mod go.sum ./
-RUN go mod edit -replace=github.com/synackd/coresmd=/coresmd
+RUN go mod edit -replace=github.com/OpenCHAMI/coresmd=/coresmd
 RUN go mod download
 COPY . .
 
@@ -32,8 +32,8 @@ RUN /coredhcp/coredhcp-generator \
 	-t /coredhcp/cmds/coredhcp-generator/coredhcp.go.template \
 	-f /coredhcp/cmds/coredhcp-generator/core-plugins.txt \
 	-o /coredhcp-coresmd/coredhcp.go \
-	github.com/synackd/coresmd/coresmd \
-	github.com/synackd/coresmd/bootloop
+	github.com/OpenCHAMI/coresmd/coresmd \
+	github.com/OpenCHAMI/coresmd/bootloop
 
 #
 # STEP 3: Build CoreDHCP
@@ -41,7 +41,7 @@ RUN /coredhcp/coredhcp-generator \
 
 RUN go mod init coredhcp
 RUN go mod edit -replace=github.com/coredhcp/coredhcp=/coredhcp
-RUN go mod edit -replace=github.com/synackd/coresmd=/coresmd
+RUN go mod edit -replace=github.com/OpenCHAMI/coresmd=/coresmd
 RUN go mod tidy
 RUN go build -o coredhcp
 

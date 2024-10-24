@@ -11,8 +11,8 @@ import (
 	"github.com/coredhcp/coredhcp/logger"
 	"github.com/coredhcp/coredhcp/plugins"
 	"github.com/insomniacslk/dhcp/dhcpv4"
-	"github.com/synackd/coresmd/internal/debug"
-	"github.com/synackd/coresmd/internal/ipxe"
+	"github.com/OpenCHAMI/coresmd/internal/debug"
+	"github.com/OpenCHAMI/coresmd/internal/ipxe"
 )
 
 type IfaceInfo struct {
