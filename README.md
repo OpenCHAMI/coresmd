@@ -1,7 +1,30 @@
 # coresmd
 
+<!-- Text width is 80, only use spaces and use 4 spaces instead of tabs -->
+<!-- vim: set et sta tw=80 ts=4 sw=4 sts=0: -->
+
 A CoreDHCP plugin with a pull-through cache that uses
-[SMD](https://github.com/OpenCHAMI/smd) as its source of truth.
+[SMD](https://github.com/OpenCHAMI/smd) as its source of truth. This is part of
+the [OpenCHAMI](https://openchami.org) project.
+
+This repository contains two plugins:
+
+- **coresmd** --- The purpose of this plugin is to provide DHCP leases based on
+  data from SMD.
+- **bootloop** --- The purpose of this plugin is to be a "catch-all" that causes
+  nodes/BMCs/etc. unknown to SMD to get a temporary IP address from a pool with
+  a short, user-defined lease time. This is so that if they are ever added to
+  SMD, they will quickly get a longer lease from the **coresmd** plugin.
+
+  An iPXE boot script that simply reboots is served to anything that can boot to
+  force the whole DHCP handshake (DORA) to reoccur to obtain a new lease. If the
+  plugin receives a DHCPREQUEST and its IP is already leased, a DHCPNAK is sent
+  so that it will reinitiate the entire DHCP handshake.
+
+  The goal is to have any MAC addresses that are unknown continually try and get
+  a new IP address in the case they become known, but to also give them
+  (especially BMCs) a temporary IP address so that they can be discovered (e.g.
+  by [Magellan](https://github.com/OpenCHAMI/magellan).
 
 ## Building
 
@@ -106,38 +129,42 @@ You'll now have a `coredhcp` binary in the current directory you can run.
 
 ## Configuration
 
-CoreDHCP requires a config file to run. An example `config.yaml` that configures
-the basics along with coresmd is as follows:
+CoreDHCP requires a config file to run. An example `config.yaml` can be found at
+`dist/config.example.yaml`. That file contains comments on when/how to use the
+coresmd and bootloop plugins, including which arguments to pass.
 
-```yaml
-server4:
-  plugins:
-    - lease_time: 3600s
-    - server_id: 172.16.0.253
-    - dns: 10.15.3.42 10.0.69.16 10.0.69.17
-    - router: 172.16.0.254
-    - netmask: 255.255.255.0
-    - coresmd: https://foobar.openchami.cluster http://172.16.0.253:8081 /root_ca/root_ca.crt 30s eyJh...
+## Usage
+
+### Preparation: SMD and BSS
+
+Before running CoreDHCP, the OpenCHAMI services (namely BSS and SMD) should
+already be configured and running using the base URL and boot script base URL
+configured in the CoreDHCP config file.
+
+### Preparation: TFTP
+
+Neither CoreDHCP nor this plugin provide TFTP capability, so a separate TFTP
+server is required to be running[^tftp]. The IP address that this server listens
+on should match the `server_id` directive in the CoreDHCP config file. This
+server should serve the following files:
+
+- `reboot.ipxe` --- This file is located `dist/` in this repository.
+- `ipxe.efi` --- The iPXE x86\_64 EFI bootloader. This can be found
+  [here](https://boot.ipxe.org/ipxe.efi).
+- `undionly.kpxe` --- The iPXE x86 legacy bootloader. This can be found
+  [here](https://boot.ipxe.org/undionly.kpxe).
+
+[^tftp]: [Here](https://github.com/aguslr/docker-atftpd) is one that is easy to
+    get running.
+
+### Running CoreDHCP
+
+After the above prerequisites have been completed, CoreDHCP can be run with its
+config file. It can be run in a container or on bare metal, though if running
+via container host networking is required.
+
+For example, to run using Docker:
+
 ```
-
-For the coresmd plugin, the arguments are as follows:
-
-1. **OpenCHAMI Base URL** --- This is the base URL for which the plugin will
-   append OpenCHAMI service endpoints onto.
-1. **Boot Script Base URL** --- Since the OpenCHAMI Base URL is usually
-   protected with TLS, this argument represents the base URL that nodes are told
-   to fetch their boot script from. Since it is likely that the CA certificate
-   is not in the bootloader, this URL is usually HTTP without TLS.
-1. **CA Certificate Path** --- This argument is the path to a CA certificate (in
-   PEM format) to validate OpenCHAMI certificates with. This argument can be
-   empty to use the system certificate store.
-1. **Cache Validity Duration** --- This argument represents the duration that
-   the cache should remain valid before updating. This is a duration string that
-   is parsed by [`time.ParseDuration()`](https://pkg.go.dev/time#ParseDuration)
-   (e.g. `1h`, `1.5h`, `1h30m`). Valid time units are "ns", "us" (or "µs"),
-   "ms", "s", "m", "h".
-1. **SMD JWT** --- This plugin reads SMD's `/Inventory/RedfishEndpoints`
-   endpoint (which is currently protected) to get BMC info. This argument is a
-   valid JSON Web Token (JWT) to present to SMD to authenticate to this
-   endpoint. It is hoped that this endpoint will open up to eliminate the need
-   for this argument.
+docker run --rm -v <path_to_config_file>:/etc/coredhcp/config.yaml:ro ghcr.io/synackd/coresmd:latest
+```
