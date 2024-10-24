@@ -15,8 +15,8 @@ import (
 	"github.com/coredhcp/coredhcp/plugins/allocators"
 	"github.com/coredhcp/coredhcp/plugins/allocators/bitmap"
 	"github.com/insomniacslk/dhcp/dhcpv4"
-	"github.com/synackd/coresmd/pkg/debug"
-	"github.com/synackd/coresmd/pkg/ipxe"
+	"github.com/synackd/coresmd/internal/debug"
+	"github.com/synackd/coresmd/internal/ipxe"
 )
 
 // Record holds an IP lease record
