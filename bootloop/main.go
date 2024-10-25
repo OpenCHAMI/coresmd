@@ -93,7 +93,7 @@ func setup4(args ...string) (handler.Handler4, error) {
 		return nil, fmt.Errorf("start IP must be equal or higher than end IP")
 	}
 	log.Infof("IPv4 address range from %s to %s", ipv4Start.To4().String(), ipv4End.To4().String())
-	ipv4Range := binary.BigEndian.Uint32(ipv4Start.To4()) - binary.BigEndian.Uint32(ipv4End.To4())
+	ipv4Range := binary.BigEndian.Uint32(ipv4End.To4()) - binary.BigEndian.Uint32(ipv4Start.To4()) + 1
 	log.Infof("%d addresses in range", ipv4Range)
 
 	// Create IP address allocator based on IP range
