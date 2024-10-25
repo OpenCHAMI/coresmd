@@ -89,8 +89,8 @@ func setup4(args ...string) (handler.Handler4, error) {
 	}
 
 	// Calculate range to make sure it is valid
-	if binary.BigEndian.Uint32(ipv4Start.To4()) >= binary.BigEndian.Uint32(ipv4End.To4()) {
-		return nil, fmt.Errorf("start IP must be higher than end IP")
+	if binary.BigEndian.Uint32(ipv4Start.To4()) > binary.BigEndian.Uint32(ipv4End.To4()) {
+		return nil, fmt.Errorf("start IP must be equal or higher than end IP")
 	}
 	log.Infof("IPv4 address range from %s to %s", ipv4Start.To4().String(), ipv4End.To4().String())
 	ipv4Range := binary.BigEndian.Uint32(ipv4Start.To4()) - binary.BigEndian.Uint32(ipv4End.To4())
