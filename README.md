@@ -43,6 +43,13 @@ docker build . --tag coresmd:latest
 
 ### Bare Metal
 
+Prerequisites:
+
+- go >= 1.21
+- git
+- bash
+- sed
+
 **NOTE:** Certain source files in CoreDHCP only build on Linux, which will cause
 build errors when building on other platforms like Mac.
 
@@ -51,7 +58,20 @@ It is recommended to do this within a clean directory.
 1. Create directory for generated source files:
 
    ```
-   mkdir coresmd
+   mkdir build
+   ```
+
+1. Clone CoreSMD (**NOTE:** This is not *strictly* necessary for CoreDHCP, but
+   *is* necessary to include the plugin version).
+
+   ```
+   git clone https://github.com/OpenCHAMI/coresmd
+   ```
+
+   Generate the plugin version:
+
+   ```
+   ./coresmd/gen_version.bash
    ```
 
 1. Clone CoreDHCP and change the working directory to the coredhcp-generator
@@ -72,7 +92,10 @@ It is recommended to do this within a clean directory.
 1. Run the generator to generate the CoreDHCP source file.
 
    ```
-   ./coredhcp-generator -f core-plugins.txt -t coredhcp.go.template -o ../../../coresmd/coredhcp.go \
+   ./coredhcp-generator \
+     -f core-plugins.txt \
+     -t coredhcp.go.template \
+     -o ../../../build/coredhcp.go \
      github.com/OpenCHAMI/coresmd/coresmd \
      github.com/OpenCHAMI/coresmd/bootloop
    ```
@@ -80,42 +103,36 @@ It is recommended to do this within a clean directory.
    You should see output similar to the following:
 
    ```
-   2024/10/23 22:57:51 Generating output file '../../../coresmd/coredhcp.go' with 17 plugin(s):
-   2024/10/23 22:57:51   1) github.com/OpenCHAMI/coresmd/bootloop
-   2024/10/23 22:57:51   2) github.com/coredhcp/coredhcp/plugins/autoconfigure
-   2024/10/23 22:57:51   3) github.com/coredhcp/coredhcp/plugins/file
-   2024/10/23 22:57:51   4) github.com/coredhcp/coredhcp/plugins/prefix
-   2024/10/23 22:57:51   5) github.com/coredhcp/coredhcp/plugins/leasetime
-   2024/10/23 22:57:51   6) github.com/coredhcp/coredhcp/plugins/mtu
-   2024/10/23 22:57:51   7) github.com/coredhcp/coredhcp/plugins/nbp
-   2024/10/23 22:57:51   8) github.com/coredhcp/coredhcp/plugins/router
-   2024/10/23 22:57:51   9) github.com/coredhcp/coredhcp/plugins/searchdomains
-   2024/10/23 22:57:51  10) github.com/coredhcp/coredhcp/plugins/dns
-   2024/10/23 22:57:51  11) github.com/coredhcp/coredhcp/plugins/netmask
-   2024/10/23 22:57:51  12) github.com/coredhcp/coredhcp/plugins/range
-   2024/10/23 22:57:51  13) github.com/coredhcp/coredhcp/plugins/serverid
-   2024/10/23 22:57:51  14) github.com/coredhcp/coredhcp/plugins/sleep
-   2024/10/23 22:57:51  15) github.com/coredhcp/coredhcp/plugins/staticroute
-   2024/10/23 22:57:51  16) github.com/OpenCHAMI/coresmd/coresmd
-   2024/10/23 22:57:51  17) github.com/coredhcp/coredhcp/plugins/ipv6only
-   2024/10/23 22:57:51 Generated file '../../../coresmd/coredhcp.go'. You can build it by running 'go build' in the output directory.
-   ../../../coresmd
+   2024/10/25 10:33:42 Generating output file '../../../build/coredhcp.go' with 17 plugin(s):
+   2024/10/25 10:33:42   1) github.com/coredhcp/coredhcp/plugins/autoconfigure
+   2024/10/25 10:33:42   2) github.com/coredhcp/coredhcp/plugins/ipv6only
+   2024/10/25 10:33:42   3) github.com/coredhcp/coredhcp/plugins/nbp
+   2024/10/25 10:33:42   4) github.com/coredhcp/coredhcp/plugins/range
+   2024/10/25 10:33:42   5) github.com/coredhcp/coredhcp/plugins/leasetime
+   2024/10/25 10:33:42   6) github.com/coredhcp/coredhcp/plugins/mtu
+   2024/10/25 10:33:42   7) github.com/coredhcp/coredhcp/plugins/router
+   2024/10/25 10:33:42   8) github.com/OpenCHAMI/coresmd/bootloop
+   2024/10/25 10:33:42   9) github.com/coredhcp/coredhcp/plugins/sleep
+   2024/10/25 10:33:42  10) github.com/coredhcp/coredhcp/plugins/staticroute
+   2024/10/25 10:33:42  11) github.com/coredhcp/coredhcp/plugins/prefix
+   2024/10/25 10:33:42  12) github.com/coredhcp/coredhcp/plugins/serverid
+   2024/10/25 10:33:42  13) github.com/coredhcp/coredhcp/plugins/searchdomains
+   2024/10/25 10:33:42  14) github.com/OpenCHAMI/coresmd/coresmd
+   2024/10/25 10:33:42  15) github.com/coredhcp/coredhcp/plugins/dns
+   2024/10/25 10:33:42  16) github.com/coredhcp/coredhcp/plugins/file
+   2024/10/25 10:33:42  17) github.com/coredhcp/coredhcp/plugins/netmask
+   2024/10/25 10:33:42 Generated file '../../../build/coredhcp.go'. You can build it by running 'go build' in the output directory.
+   ../../../build
    ```
 
 1. Change directory into the directory, initialize it as a Go module.
 
    ```
-   cd ../../../coresmd
+   cd ../../../build
    go mod init coredhcp   # the module name doesn't matter
    go mod edit -go=1.21
    go mod edit -replace=github.com/coredhcp/coredhcp=../coredhcp
-   ```
-   **Only if you have coresmd checked out locally**
-   ```
-   go mod edit -replace=github.com/OpenCHAMI/coresmd=<path_to_checkout>
-   ```
-   Finally:
-   ```
+   go mod edit -replace=github.com/OpenCHAMI/coresmd=../coresmd
    go mod tidy
    ```
 
