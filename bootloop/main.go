@@ -17,6 +17,7 @@ import (
 	"github.com/insomniacslk/dhcp/dhcpv4"
 	"github.com/OpenCHAMI/coresmd/internal/debug"
 	"github.com/OpenCHAMI/coresmd/internal/ipxe"
+	"github.com/OpenCHAMI/coresmd/internal/version"
 )
 
 // Record holds an IP lease record
@@ -57,6 +58,8 @@ func setup6(args ...string) (handler.Handler6, error) {
 }
 
 func setup4(args ...string) (handler.Handler4, error) {
+	log.Infof("initializing coresmd/bootloop %s (%s), built %s", version.Version, version.Commit, version.Date)
+
 	// Ensure all required args were passed
 	if len(args) != 4 {
 		return nil, fmt.Errorf("wanted 4 arguments (file name, lease duration, IPv4 range start, IPv4 range end), got %d", len(args))

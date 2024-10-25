@@ -24,6 +24,7 @@ COPY go.mod go.sum ./
 RUN go mod edit -replace=github.com/OpenCHAMI/coresmd=/coresmd
 RUN go mod download
 COPY . .
+RUN ./gen_version.bash
 
 RUN mkdir /coredhcp-coresmd
 WORKDIR /coredhcp-coresmd

@@ -13,6 +13,7 @@ import (
 	"github.com/insomniacslk/dhcp/dhcpv4"
 	"github.com/OpenCHAMI/coresmd/internal/debug"
 	"github.com/OpenCHAMI/coresmd/internal/ipxe"
+	"github.com/OpenCHAMI/coresmd/internal/version"
 )
 
 type IfaceInfo struct {
@@ -43,6 +44,8 @@ func setup6(args ...string) (handler.Handler6, error) {
 }
 
 func setup4(args ...string) (handler.Handler4, error) {
+	log.Infof("initializing coresmd/coresmd %s (%s), built %s", version.Version, version.Commit, version.Date)
+
 	// Ensure all required args were passed
 	if len(args) != 5 {
 		return nil, errors.New("expected 5 arguments: base URL, boot script base URL, CA certificate path, cache duration, lease duration")
