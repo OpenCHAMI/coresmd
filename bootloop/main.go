@@ -9,21 +9,21 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OpenCHAMI/coresmd/internal/debug"
+	"github.com/OpenCHAMI/coresmd/internal/ipxe"
+	"github.com/OpenCHAMI/coresmd/internal/version"
 	"github.com/coredhcp/coredhcp/handler"
 	"github.com/coredhcp/coredhcp/logger"
 	"github.com/coredhcp/coredhcp/plugins"
 	"github.com/coredhcp/coredhcp/plugins/allocators"
 	"github.com/coredhcp/coredhcp/plugins/allocators/bitmap"
 	"github.com/insomniacslk/dhcp/dhcpv4"
-	"github.com/OpenCHAMI/coresmd/internal/debug"
-	"github.com/OpenCHAMI/coresmd/internal/ipxe"
-	"github.com/OpenCHAMI/coresmd/internal/version"
 )
 
 // Record holds an IP lease record
 type Record struct {
-	IP      net.IP
-	expires int
+	IP       net.IP
+	expires  int
 	hostname string
 }
 
@@ -58,7 +58,7 @@ func setup6(args ...string) (handler.Handler6, error) {
 }
 
 func setup4(args ...string) (handler.Handler4, error) {
-	log.Infof("initializing coresmd/bootloop %s (%s), built %s", version.Version, version.Commit, version.Date)
+	log.Infof("initializing coresmd/bootloop %s (%s), built %s", version.Version, version.GitCommit, version.BuildTime)
 
 	// Ensure all required args were passed
 	if len(args) != 4 {
@@ -149,8 +149,8 @@ func (p *PluginState) Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) 
 			return nil, true
 		}
 		rec := Record{
-			IP:      ip.IP.To4(),
-			expires: int(time.Now().Add(p.LeaseTime).Unix()),
+			IP:       ip.IP.To4(),
+			expires:  int(time.Now().Add(p.LeaseTime).Unix()),
 			hostname: hostname,
 		}
 		err = p.saveIPAddress(req.ClientHWAddr, &rec)

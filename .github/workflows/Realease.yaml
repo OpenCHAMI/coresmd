@@ -1,0 +1,76 @@
+name: Release with goreleaser
+
+on:
+  push:
+    tags:
+      - v*
+      
+permissions: write-all # Necessary for the generate-build-provenance action with containers
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up latest stable Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-tags: 1
+          fetch-depth: 1
+
+      # Set environment variables required by GoReleaser
+      - name: Set build environment variables
+        run: |
+          echo "GIT_STATE=$(if git diff-index --quiet HEAD --; then echo 'clean'; else echo 'dirty'; fi)" >> $GITHUB_ENV
+          echo "BUILD_HOST=$(hostname)" >> $GITHUB_ENV
+          echo "GO_VERSION=$(go version | awk '{print $3}')" >> $GITHUB_ENV
+          echo "BUILD_USER=$(whoami)" >> $GITHUB_ENV
+          echo "CGO_ENABLED=1" >> $GITHUB_ENV
+      - name: Docker Login
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Release with goreleaser
+        uses: goreleaser/goreleaser-action@v6
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          version: '~> v2'
+          args: release --clean
+        id: goreleaser
+
+      - name: Process goreleaser output
+        id: process_goreleaser_output
+        run: |
+          echo "const fs = require('fs');" > process.js
+          echo 'const artifacts = ${{ steps.goreleaser.outputs.artifacts }}' >> process.js
+          echo "const firstNonNullDigest = artifacts.find(artifact => artifact.extra && artifact.extra.Digest != null)?.extra.Digest;" >> process.js
+          echo "console.log(firstNonNullDigest);" >> process.js
+          echo "fs.writeFileSync('digest.txt', firstNonNullDigest);" >> process.js
+          node process.js
+          echo "digest=$(cat digest.txt)" >> $GITHUB_OUTPUT
+          
+      - name: Attest coredhcp binary linux_amd64
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: dist/coredhcp_linux_amd64_v3/coredhcp
+          
+      - name: Attest coredhcp binary linux_arm64
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: dist/coredhcp_linux_arm64/coredhcp
+          
+      - name: generate build provenance of docker container
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ghcr.io/openchami/coredhcp
+          subject-digest: ${{ steps.process_goreleaser_output.outputs.digest }}
+          push-to-registry: true
