@@ -211,8 +211,8 @@ You'll now have a `coredhcp` binary in the current directory you can run.
 ## Configuration
 
 CoreDHCP requires a config file to run. An example `config.yaml` can be found at
-`dist/config.example.yaml`. That file contains comments on when/how to use the
-coresmd and bootloop plugins, including which arguments to pass.
+`resources/config.example.yaml`. That file contains comments on when/how to use
+the coresmd and bootloop plugins, including which arguments to pass.
 
 ## Usage
 
@@ -229,7 +229,7 @@ server is required to be running[^tftp]. The IP address that this server listens
 on should match the `server_id` directive in the CoreDHCP config file. This
 server should serve the following files:
 
-- `reboot.ipxe` --- This file is located `dist/` in this repository.
+- `reboot.ipxe` --- This file is located `resources/` in this repository.
 - `ipxe.efi` --- The iPXE x86\_64 EFI bootloader. This can be found
   [here](https://boot.ipxe.org/ipxe.efi).
 - `undionly.kpxe` --- The iPXE x86 legacy bootloader. This can be found
