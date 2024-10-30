@@ -63,7 +63,7 @@ Follow the installation instructions from [GoReleaser’s documentation](https:/
 
 1. Run GoReleaser in snapshot mode with the --snapshot and --skip-publish flags to create a local build without attempting to release it:
   ```bash
-  goreleaser release --snapshot --skip-publish --clean
+  goreleaser release --snapshot --skip publish --clean
   ```
 2.	Check the dist/ directory for the built binaries, which will include the metadata from the environment variables. You can inspect the binary output to confirm that the metadata was correctly embedded.
 
