@@ -35,7 +35,12 @@ builds:
          -X main.BuildUser={{ .Env.BUILD_USER }} "
     binary: coredhcp
     env:
-      - CGO_ENABLED=0
+      # The bootloop plugin uses sqlite3 which requires CGO.
+      - CGO_ENABLED=1
+      - >-
+        CC={{- if eq .Os "linux" -}}
+            {{- if eq .Arch "amd64" -}}gcc{{- else -}}aarch64-linux-gnu-gcc{{- end -}}
+        {{- end }}
 
 
 dockers:
