@@ -83,26 +83,11 @@ documentation](https://goreleaser.com/install/).
 
 ### Container
 
-**goreleaser.dockerfile**
-
-This dockerfile is what is used by Goreleaser to build containers. It assumes
-the binary build from cmds/coredhcp.go has already been built. This dockerfile
-is meant to be used for automated container releases, but can be used for local
-builds as well. Run this using the `goreleaser` command above or with:
+This repository includes a Dockerfile that builds CoreDHCP with its core plugins
+as well as this plugin.
 
 ```
-docker build -f goreleaser.dockerfile -t ghcr.io/openchami/coredhcp:latest .
-```
-
-**Dockerfile**
-
-This dockerfile uses the CoreDHCP generator to generate coredhcp.go using the
-coresmd sources. It is meant to be used to be friendly for building a local
-CoreDHCP container. The resulting CoreDHCP contains all of the core plugins plus
-`coresmd` and `bootloop`. Build with:
-
-```
-docker build . --tag ghcr.io/openchami/coresmd:latest
+docker build . --tag coresmd:latest
 ```
 
 ### Bare Metal
