@@ -4,13 +4,12 @@ project_name: coredhcp
 before:
   hooks:
   - go install github.com/coredhcp/coredhcp/cmds/coredhcp-generator@latest
-  - mkdir -p cmd/
-  - coredhcp-generator -t generator/coredhcp.go.template -f generator/plugins.txt github.com/OpenCHAMI/coresmd/coresmd github.com/OpenCHAMI/coresmd/bootloop -o cmd/coredhcp.go
+  - coredhcp-generator -t generator/coredhcp.go.template -f generator/plugins.txt github.com/OpenCHAMI/coresmd/coresmd github.com/OpenCHAMI/coresmd/bootloop -o coredhcp/coredhcp.go
   - go mod tidy
 
 builds:
   - id: coredhcp
-    main: ./cmd/
+    main: ./coredhcp/
     goos:
       - linux
     goarch:
