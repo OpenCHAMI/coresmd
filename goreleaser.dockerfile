@@ -2,7 +2,7 @@ FROM chainguard/wolfi-base:latest
 
 RUN apk add --no-cache tini
 
-# Include tini in the final image.
+# Include curl in the final image.
 RUN set -ex \
     && apk update \
     && apk add --no-cache curl tini \
