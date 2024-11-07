@@ -68,7 +68,7 @@ jobs:
       - name: Attest coredhcp binary linux_arm64
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: dist/coredhcp_linux_arm64/coredhcp
+          subject-path: dist/coredhcp_linux_arm64_v8.0/coredhcp
           
       - name: generate build provenance of docker container
         uses: actions/attest-build-provenance@v1
