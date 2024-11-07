@@ -5,6 +5,7 @@
 {{/* This file is the template source. The following comment obviously doesn't apply here */ -}}
 // This is a generated file, edits should be made in the corresponding source file
 // And this file regenerated using `coredhcp-generator --from core-plugins.txt`
+// From CoreDHCP commit 576af8676ffaff9c85800fae235f614cb65410bd
 package main
 
 import (

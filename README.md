@@ -35,15 +35,23 @@ This is meant to be built statically into
 
 ## Build/Install with goreleaser
 
-This project uses [GoReleaser](https://goreleaser.com/) to automate releases and include additional build metadata such as commit info, build time, and versioning. Below is a guide on how to set up and build the project locally using GoReleaser.
+This project uses [GoReleaser](https://goreleaser.com/) to automate releases and
+include additional build metadata such as commit info, build time, and
+versioning. Below is a guide on how to set up and build the project locally
+using GoReleaser.
 
 ### Environment Variables
 
-To include detailed build metadata, ensure the following environment variables are set:
+To include detailed build metadata, ensure the following environment variables
+are set:
 
-* __GIT_STATE__: Indicates whether there are uncommitted changes in the working directory. Set to clean if the repository is clean, or dirty if there are uncommitted changes.
-* __BUILD_HOST__: The hostname of the machine where the build is being performed. 
-* __GO_VERSION__: The version of Go used for the build. GoReleaser uses this to ensure consistent Go versioning information.
+* __GIT_STATE__: Indicates whether there are uncommitted changes in the working
+  directory. Set to clean if the repository is clean, or dirty if there are
+uncommitted changes.
+* __BUILD_HOST__: The hostname of the machine where the build is being
+  performed.
+* __GO_VERSION__: The version of Go used for the build. GoReleaser uses this to
+  ensure consistent Go versioning information.
 * __BUILD_USER__: The username of the person or system performing the build.
 
 Set all the environment variables with:
@@ -56,16 +64,21 @@ export BUILD_USER=$(whoami)
 
 ### Building Locally with GoReleaser
 
-Once the environment variables are set, you can build the project locally using GoReleaser in snapshot mode (to avoid publishing).
+Once the environment variables are set, you can build the project locally using
+GoReleaser in snapshot mode (to avoid publishing).
 
 
-Follow the installation instructions from [GoReleaser’s documentation](https://goreleaser.com/install/).
+Follow the installation instructions from [GoReleaser’s
+documentation](https://goreleaser.com/install/).
 
-1. Run GoReleaser in snapshot mode with the --snapshot and --skip-publish flags to create a local build without attempting to release it:
+1. Run GoReleaser in snapshot mode with the --snapshot and --skip-publish flags
+   to create a local build without attempting to release it:
   ```bash
-  goreleaser release --snapshot --skip-publish --clean
+  goreleaser release --snapshot --skip publish --clean
   ```
-2.	Check the dist/ directory for the built binaries, which will include the metadata from the environment variables. You can inspect the binary output to confirm that the metadata was correctly embedded.
+2. Check the dist/ directory for the built binaries, which will include the
+   metadata from the environment variables. You can inspect the binary output
+   to confirm that the metadata was correctly embedded.
 
 
 ### Container
@@ -183,8 +196,8 @@ You'll now have a `coredhcp` binary in the current directory you can run.
 ## Configuration
 
 CoreDHCP requires a config file to run. An example `config.yaml` can be found at
-`dist/config.example.yaml`. That file contains comments on when/how to use the
-coresmd and bootloop plugins, including which arguments to pass.
+`resources/config.example.yaml`. That file contains comments on when/how to use
+the coresmd and bootloop plugins, including which arguments to pass.
 
 ## Usage
 
@@ -201,7 +214,7 @@ server is required to be running[^tftp]. The IP address that this server listens
 on should match the `server_id` directive in the CoreDHCP config file. This
 server should serve the following files:
 
-- `reboot.ipxe` --- This file is located `dist/` in this repository.
+- `reboot.ipxe` --- This file is located `resources/` in this repository.
 - `ipxe.efi` --- The iPXE x86\_64 EFI bootloader. This can be found
   [here](https://boot.ipxe.org/ipxe.efi).
 - `undionly.kpxe` --- The iPXE x86 legacy bootloader. This can be found

@@ -4,13 +4,12 @@ project_name: coredhcp
 before:
   hooks:
   - go install github.com/coredhcp/coredhcp/cmds/coredhcp-generator@latest
-  - mkdir -p cmd/
-  - coredhcp-generator -t generator/coredhcp.go.template -f generator/plugins.txt github.com/OpenCHAMI/coresmd/coresmd github.com/OpenCHAMI/coresmd/bootloop -o cmd/coredhcp.go
+  - coredhcp-generator -t generator/coredhcp.go.template -f generator/plugins.txt github.com/OpenCHAMI/coresmd/coresmd github.com/OpenCHAMI/coresmd/bootloop -o coredhcp/coredhcp.go
   - go mod tidy
 
 builds:
   - id: coredhcp
-    main: ./cmd/
+    main: ./coredhcp/
     goos:
       - linux
     goarch:
@@ -19,6 +18,7 @@ builds:
     goamd64:
       - v3
 
+    # If you want to build this locally, you can set the following environment variables:
     # export GIT_STATE=$(if git diff-index --quiet HEAD --; then echo 'clean'; else echo 'dirty'; fi)
     # export BUILD_HOST=$(hostname)
     # export GO_VERSION=$(go version | awk '{print $3}')
@@ -35,7 +35,12 @@ builds:
          -X main.BuildUser={{ .Env.BUILD_USER }} "
     binary: coredhcp
     env:
-      - CGO_ENABLED=0
+      # The bootloop plugin uses sqlite3 which requires CGO.
+      - CGO_ENABLED=1
+      - >-
+        CC={{- if eq .Os "linux" -}}
+            {{- if eq .Arch "amd64" -}}gcc{{- else -}}aarch64-linux-gnu-gcc{{- end -}}
+        {{- end }}
 
 
 dockers:
