@@ -11,9 +11,6 @@ RUN set -ex \
 COPY coredhcp /coredhcp
 
 
-# nobody 65534:65534
-USER 65534:65534
-
 CMD [ "/coredhcp" ]
 
 ENTRYPOINT [ "/sbin/tini", "--" ]
