@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/OpenCHAMI/coresmd/internal/debug"
@@ -69,7 +70,8 @@ func setup4(args ...string) (handler.Handler4, error) {
 	}
 
 	// If nonempty, test that CA cert path exists (third argument)
-	caCertPath := args[2]
+	caCertPath := strings.Trim(args[2], `"'`)
+	log.Infof("cacertPath: %s", caCertPath)
 	if caCertPath != "" {
 		if err := smdClient.UseCACert(caCertPath); err != nil {
 			return nil, fmt.Errorf("failed to set CA certificate: %w", err)
