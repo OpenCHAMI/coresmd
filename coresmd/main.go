@@ -98,6 +98,10 @@ func setup4(args ...string) (handler.Handler4, error) {
 
 	cache.RefreshLoop()
 
+	// Start tftpserver
+	log.Info("starting TFTP server on port 69 with directory /tftpboot")
+	go startTFTPServer("/tftpboot")
+
 	log.Infof("coresmd plugin initialized with base URL %s and validity duration %s", smdClient.BaseURL, cache.Duration.String())
 
 	return Handler4, nil
