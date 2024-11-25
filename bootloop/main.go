@@ -137,6 +137,9 @@ func (p *PluginState) Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) 
 
 	debug.DebugRequest(log, req)
 
+	// Set root path to this server's IP
+	resp.Options.Update(dhcpv4.OptRootPath(resp.ServerIPAddr.String()))
+
 	record, ok := p.Recordsv4[req.ClientHWAddr.String()]
 	hostname := req.HostName()
 	cinfo := req.Options.Get(dhcpv4.OptionUserClassInformation)
