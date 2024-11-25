@@ -134,6 +134,9 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 		resp.Options.Update(dhcpv4.OptHostName(fmt.Sprintf("nid%03d", ifaceInfo.CompNID)))
 	}
 
+	// Set root path to this server's IP
+	resp.Options.Update(dhcpv4.OptRootPath(resp.ServerIPAddr.String()))
+
 	// STEP 2: Send boot config
 	if cinfo := req.Options.Get(dhcpv4.OptionUserClassInformation); string(cinfo) != "iPXE" {
 		// BOOT STAGE 1: Send iPXE bootloader over TFTP
