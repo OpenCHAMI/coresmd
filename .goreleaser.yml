@@ -10,7 +10,7 @@ before:
 builds:
   - id: coredhcp
     main: ./coredhcp/
-    goos:
+    goos:  # CoreDHCP only supports linux
       - linux
     goarch:
       - amd64
