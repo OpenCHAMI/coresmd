@@ -17,8 +17,8 @@ reboot
 type ScriptReader struct{}
 
 func (sr ScriptReader) Read(b []byte) (int, error) {
-	b = []byte(defaultScript)
-	return len(b), nil
+	nBytes := copy(b, []byte(defaultScript))
+	return nBytes, io.EOF
 }
 
 func startTFTPServer(directory string) {
