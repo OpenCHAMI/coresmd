@@ -8,6 +8,19 @@ import (
 	"github.com/pin/tftp"
 )
 
+const defaultScriptName = "default"
+
+var defaultScript = `#!ipxe
+reboot
+`
+
+type ScriptReader struct{}
+
+func (sr ScriptReader) Read(b []byte) (int, error) {
+	b = []byte(defaultScript)
+	return len(b), nil
+}
+
 func startTFTPServer(directory string) {
 	s := tftp.NewServer(readHandler(directory), nil)
 	err := s.ListenAndServe(":69") // default TFTP port
@@ -18,6 +31,11 @@ func startTFTPServer(directory string) {
 
 func readHandler(directory string) func(string, io.ReaderFrom) error {
 	return func(filename string, rf io.ReaderFrom) error {
+		if filename == defaultScriptName {
+			var sr ScriptReader
+			_, err := rf.ReadFrom(sr)
+			return err
+		}
 		filePath := filepath.Join(directory, filename)
 		file, err := os.Open(filePath)
 		if err != nil {
