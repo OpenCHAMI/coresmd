@@ -209,19 +209,16 @@ configured in the CoreDHCP config file.
 
 ### Preparation: TFTP
 
-Neither CoreDHCP nor this plugin provide TFTP capability, so a separate TFTP
-server is required to be running[^tftp]. The IP address that this server listens
-on should match the `server_id` directive in the CoreDHCP config file. This
-server should serve the following files:
+With default configuration, no preparation is needed.
 
-- `reboot.ipxe` --- This file is located `resources/` in this repository.
-- `ipxe.efi` --- The iPXE x86\_64 EFI bootloader. This can be found
-  [here](https://boot.ipxe.org/ipxe.efi).
-- `undionly.kpxe` --- The iPXE x86 legacy bootloader. This can be found
-  [here](https://boot.ipxe.org/undionly.kpxe).
+Coresmd comes with a built-in TFTP server that includes iPXE bootloader binaries
+for 32-/64-bit x86/ARM (EFI) and legacy x86 CPU architectures.
 
-[^tftp]: [Here](https://github.com/aguslr/docker-atftpd) is one that is easy to
-    get running.
+When using the bootloop plugin, if the boot script path is set to "default" (see
+example config file), then the built-in reboot iPXE script is used for unknown
+nodes. This can be changed to a path in TFTP to an alternate custom iPXE boot
+script if different functionality is desired. Of course, whatever path is
+specified must exist on the TFTP server.
 
 ### Running CoreDHCP
 
