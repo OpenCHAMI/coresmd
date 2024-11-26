@@ -131,7 +131,7 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 
 	// Set client hostname
 	if ifaceInfo.Type == "Node" {
-		resp.Options.Update(dhcpv4.OptHostName(fmt.Sprintf("nid%03d", ifaceInfo.CompNID)))
+		resp.Options.Update(dhcpv4.OptHostName(fmt.Sprintf("nid%04d", ifaceInfo.CompNID)))
 	}
 
 	// Set root path to this server's IP
