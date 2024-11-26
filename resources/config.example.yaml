@@ -43,10 +43,13 @@ server4:
     #      address if name servers are not configured.
     #   3. (OPTIONAL) Path to CA cert used for TLS with the SMD base URL. If
     #      there is already a trusted certificate, this can be blank ("").
-    #   4. Cache validity duration. Coresmd uses a pull-through cache to store
+    #   4. Node hostname prefix. The hostnames given to nodes will be of the
+    #      format "<prefix><nid>". If this argument is blank, "nid" is used as
+    #      the prefix. <nid> is the node ID number, 0-padded to four places.
+    #   5. Cache validity duration. Coresmd uses a pull-through cache to store
     #      network information and this is the duration to refresh that cache.
-    #   5. Lease duration.
-    - coresmd: https://foobar.openchami.cluster http://172.16.0.253:8081 /root_ca/root_ca.crt 30s 1h
+    #   6. Lease duration.
+    - coresmd: https://foobar.openchami.cluster http://172.16.0.253:8081 /root_ca/root_ca.crt '' 30s 1h
 
     # Any requests reaching this point are unknown to SMD and it is up to the
     # administrator to decide how to handle unknown packets.
