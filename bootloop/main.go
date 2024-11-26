@@ -193,6 +193,7 @@ func (p *PluginState) Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) 
 				dhcpv4.WithMessageType(dhcpv4.MessageTypeNak),
 				dhcpv4.WithTransactionID(req.TransactionID),
 				dhcpv4.WithHwAddr(req.ClientHWAddr),
+				dhcpv4.WithServerIP(resp.ServerIPAddr),
 			)
 			if err != nil {
 				log.Errorf("failed to create new %s message: %w", dhcpv4.MessageTypeNak, err)
