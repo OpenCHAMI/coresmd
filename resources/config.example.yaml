@@ -84,8 +84,12 @@ server4:
     # ARGUMENTS:
     #   1. Path to database file that keeps track of leased IPs. This will be
     #      created if it does not already exist.
-    #   2. Lease duration.
-    #   3. IP address beginning range.
-    #   4. IP address ending range.
+    #   2. Path of iPXE to use. If using the built-in coresmd TFTP server, if
+    #      this argument is 'default', the default reboot.ipxe script is used.
+    #      This should really only be used if it is desired to do something
+    #      custom instead of rebooting.
+    #   3. Lease duration.
+    #   4. IP address beginning range.
+    #   5. IP address ending range.
     #
-    - bootloop: /tmp/coredhcp.db 5m 172.16.0.156 172.16.0.200
+    - bootloop: /tmp/coredhcp.db default 5m 172.16.0.156 172.16.0.200

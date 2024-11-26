@@ -41,10 +41,11 @@ type PluginState struct {
 var log = logger.GetLogger("plugins/bootloop")
 
 var (
-	ipv4Start net.IP
-	ipv4End   net.IP
-	ipv4Range int
-	p         PluginState
+	ipv4Start  net.IP
+	ipv4End    net.IP
+	ipv4Range  int
+	p          PluginState
+	scriptPath string
 )
 
 var Plugin = plugins.Plugin{
@@ -61,8 +62,8 @@ func setup4(args ...string) (handler.Handler4, error) {
 	log.Infof("initializing coresmd/bootloop %s (%s), built %s", version.Version, version.GitCommit, version.BuildTime)
 
 	// Ensure all required args were passed
-	if len(args) != 4 {
-		return nil, fmt.Errorf("wanted 4 arguments (file name, lease duration, IPv4 range start, IPv4 range end), got %d", len(args))
+	if len(args) != 5 {
+		return nil, fmt.Errorf("wanted 5 arguments (file name, iPXE script path, lease duration, IPv4 range start, IPv4 range end), got %d", len(args))
 	}
 	var err error
 
@@ -73,20 +74,26 @@ func setup4(args ...string) (handler.Handler4, error) {
 		return nil, fmt.Errorf("file path cannot be empty")
 	}
 
+	// Parse boot script path
+	scriptPath = args[1]
+	if filename == "" {
+		return nil, fmt.Errorf("script path cannot be empty; use 'default' if unsure")
+	}
+
 	// Parse short lease duration
-	p.LeaseTime, err = time.ParseDuration(args[1])
+	p.LeaseTime, err = time.ParseDuration(args[2])
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse short lease duration %q: %w", args[0], err)
 	}
 
 	// Parse start IP
-	ipv4Start := net.ParseIP(args[2])
+	ipv4Start := net.ParseIP(args[3])
 	if ipv4Start.To4() == nil {
 		return nil, fmt.Errorf("invalid IPv4 address for range start: %s", args[1])
 	}
 
 	// Parse end IP
-	ipv4End := net.ParseIP(args[3])
+	ipv4End := net.ParseIP(args[4])
 	if ipv4End.To4() == nil {
 		return nil, fmt.Errorf("invalid IPv4 address for range end: %s", args[2])
 	}
@@ -173,7 +180,7 @@ func (p *PluginState) Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) 
 	} else {
 		if string(cinfo) == "iPXE" {
 			// BOOT STAGE 2: Send URL to BSS boot script
-			resp.Options.Update(dhcpv4.OptBootFileName("reboot.ipxe"))
+			resp.Options.Update(dhcpv4.OptBootFileName(scriptPath))
 			resp.YourIPAddr = record.IP
 			resp.Options.Update(dhcpv4.OptIPAddressLeaseTime(p.LeaseTime.Round(time.Second)))
 		} else {
@@ -186,6 +193,7 @@ func (p *PluginState) Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) 
 				dhcpv4.WithMessageType(dhcpv4.MessageTypeNak),
 				dhcpv4.WithTransactionID(req.TransactionID),
 				dhcpv4.WithHwAddr(req.ClientHWAddr),
+				dhcpv4.WithServerIP(resp.ServerIPAddr),
 			)
 			if err != nil {
 				log.Errorf("failed to create new %s message: %w", dhcpv4.MessageTypeNak, err)
