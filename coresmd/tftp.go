@@ -31,11 +31,24 @@ func startTFTPServer(directory string) {
 
 func readHandler(directory string) func(string, io.ReaderFrom) error {
 	return func(filename string, rf io.ReaderFrom) error {
+		var raddr string
+		ot, ok := rf.(tftp.OutgoingTransfer)
+		if !ok {
+			log.Error("unable to get remote address, setting to (unknown)")
+			raddr = "(unknown)"
+		} else {
+			ra := ot.RemoteAddr()
+			raptr := &ra
+			raddr = raptr.IP.String()
+		}
 		if filename == defaultScriptName {
+			log.Infof("tftp: %s requested default script")
 			var sr ScriptReader
-			_, err := rf.ReadFrom(sr)
+			nbytes, err := rf.ReadFrom(sr)
+			log.Infof("tftp: sent %d bytes of default script to %s", nbytes, raddr)
 			return err
 		}
+		log.Infof("tftp: %s requested file %s", raddr, filename)
 		filePath := filepath.Join(directory, filename)
 		file, err := os.Open(filePath)
 		if err != nil {
@@ -43,7 +56,8 @@ func readHandler(directory string) func(string, io.ReaderFrom) error {
 		}
 		defer file.Close()
 
-		_, err = rf.ReadFrom(file)
+		nbytes, err := rf.ReadFrom(file)
+		log.Infof("tftp: sent %d bytes of file %s to %s", nbytes, filename, raddr)
 		return err
 	}
 }
