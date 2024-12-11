@@ -37,7 +37,6 @@ var (
 	cache             *Cache
 	baseURL           *url.URL
 	bootScriptBaseURL *url.URL
-	hostnamePrefix    string
 	leaseDuration     time.Duration
 )
 
@@ -49,8 +48,8 @@ func setup4(args ...string) (handler.Handler4, error) {
 	log.Infof("initializing coresmd/coresmd %s (%s), built %s", version.Version, version.GitCommit, version.BuildTime)
 
 	// Ensure all required args were passed
-	if len(args) != 6 {
-		return nil, errors.New("expected 6 arguments: base URL, boot script base URL, CA certificate path, hostname prefix, cache duration, lease duration")
+	if len(args) != 5 {
+		return nil, errors.New("expected 5 arguments: base URL, boot script base URL, CA certificate path, cache duration, lease duration")
 	}
 
 	// Create new SmdClient using first argument (base URL)
@@ -82,25 +81,17 @@ func setup4(args ...string) (handler.Handler4, error) {
 		log.Infof("CA certificate path was empty, not setting")
 	}
 
-	// Parse hostname prefix
-	hostnamePrefix = strings.Trim(args[3], `"'`)
-	log.Infof("hostname prefix: %s", hostnamePrefix)
-	if hostnamePrefix == "" {
-		log.Info("no hostname prefix set, defaulting to 'nid'")
-		hostnamePrefix = "nid"
-	}
-
 	// Create new Cache using fourth argument (cache validity duration) and new SmdClient
 	// pointer
 	log.Debug("generating new Cache")
-	cache, err = NewCache(args[4], smdClient)
+	cache, err = NewCache(args[3], smdClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new cache: %w", err)
 	}
 
 	// Set lease duration from fifth argument
 	log.Debug("setting lease duration")
-	leaseDuration, err = time.ParseDuration(args[5])
+	leaseDuration, err = time.ParseDuration(args[4])
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse lease duration: %w", err)
 	}
@@ -140,7 +131,7 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 
 	// Set client hostname
 	if ifaceInfo.Type == "Node" {
-		resp.Options.Update(dhcpv4.OptHostName(fmt.Sprintf("%s%04d", hostnamePrefix, ifaceInfo.CompNID)))
+		resp.Options.Update(dhcpv4.OptHostName(fmt.Sprintf("nid%04d", ifaceInfo.CompNID)))
 	}
 
 	// Set root path to this server's IP
