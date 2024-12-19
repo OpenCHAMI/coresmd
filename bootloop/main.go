@@ -196,7 +196,7 @@ func (p *PluginState) Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) 
 				dhcpv4.WithServerIP(resp.ServerIPAddr),
 			)
 			if err != nil {
-				log.Errorf("failed to create new %s message: %w", dhcpv4.MessageTypeNak, err)
+				log.Errorf("failed to create new %s message: %s", dhcpv4.MessageTypeNak, err)
 				return resp, true
 			}
 			err = p.deleteIPAddress(req.ClientHWAddr)
@@ -205,7 +205,7 @@ func (p *PluginState) Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) 
 			}
 			delete(p.Recordsv4, req.ClientHWAddr.String())
 			if err := p.allocator.Free(net.IPNet{IP: record.IP}); err != nil {
-				log.Warnf("unable to delete IP %s: %w", record.IP.String(), err)
+				log.Warnf("unable to delete IP %s: %s", record.IP.String(), err)
 			}
 			log.Printf("MAC %s already exists with IP %s, sending %s to reinitiate DHCP handshake", req.ClientHWAddr.String(), record.IP, dhcpv4.MessageTypeNak)
 		}
