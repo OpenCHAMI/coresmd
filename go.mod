@@ -6,10 +6,15 @@ require (
 	github.com/coredhcp/coredhcp v0.0.0-20240908184240-576af8676ffa
 	github.com/insomniacslk/dhcp v0.0.0-20240829085014-a3a4c1f04475
 	github.com/mattn/go-sqlite3 v1.14.22
+	github.com/pin/tftp/v3 v3.1.0
 	github.com/sirupsen/logrus v1.9.3
 )
 
-require github.com/spf13/pflag v1.0.6-0.20201009195203-85dd5c8bc61c // indirect
+require (
+	github.com/google/gopacket v1.1.19 // indirect
+	github.com/spf13/pflag v1.0.6-0.20201009195203-85dd5c8bc61c
+	golang.org/x/net v0.27.0 // indirect
+)
 
 require (
 	github.com/bits-and-blooms/bitset v1.14.2 // indirect
@@ -25,7 +30,6 @@ require (
 	github.com/nxadm/tail v1.4.11 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/pierrec/lz4/v4 v4.1.21 // indirect
-	github.com/pin/tftp v2.1.0+incompatible
 	github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect

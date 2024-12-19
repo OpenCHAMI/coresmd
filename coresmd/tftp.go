@@ -1,11 +1,12 @@
 package coresmd
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
-	"github.com/pin/tftp"
+	"github.com/pin/tftp/v3"
 )
 
 const defaultScriptName = "default"
@@ -21,9 +22,21 @@ func (sr ScriptReader) Read(b []byte) (int, error) {
 	return nBytes, io.EOF
 }
 
-func startTFTPServer(directory string) {
-	s := tftp.NewServer(readHandler(directory), nil)
-	err := s.ListenAndServe(":69") // default TFTP port
+// tftpServer configures and starts a TFTP server.
+type tftpServer struct {
+	address    string
+	directory  string
+	port       int
+	singlePort bool
+}
+
+// Start creates, configures, and starts the TFTP server implementation.
+func (t *tftpServer) Start() {
+	s := tftp.NewServer(readHandler(t.directory), nil)
+	if t.singlePort {
+		s.EnableSinglePort()
+	}
+	err := s.ListenAndServe(fmt.Sprintf("%s:%d", t.address, t.port))
 	if err != nil {
 		log.Fatalf("failed to start TFTP server: %v", err)
 	}
@@ -42,7 +55,7 @@ func readHandler(directory string) func(string, io.ReaderFrom) error {
 			raddr = raptr.IP.String()
 		}
 		if filename == defaultScriptName {
-			log.Infof("tftp: %s requested default script")
+			log.Infof("tftp: %s requested default script", raddr)
 			var sr ScriptReader
 			nbytes, err := rf.ReadFrom(sr)
 			log.Infof("tftp: sent %d bytes of default script to %s", nbytes, raddr)
