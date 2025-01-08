@@ -56,19 +56,7 @@ var Plugin = plugins.Plugin{
 
 func logVersion() {
 	log.Infof("initializing coresmd/bootloop %s (%s), built %s", version.Version, version.GitState, version.BuildTime)
-	log.WithFields(map[string]interface{}{
-		"version": version.Version,
-		"tag": version.GitTag,
-		"commit": version.GitCommit,
-		"branch": version.GitBranch,
-		"state": version.GitState,
-		"build_timestamp": version.BuildTime,
-		"build_host": version.BuildHost,
-		"build_user": version.BuildUser,
-		"go_version": version.GoVersion,
-		"arch": version.Arch,
-		"os": version.Os,
-	}).Debugln("detailed version info")
+	log.WithFields(version.VersionInfo).Debugln("detailed version info")
 }
 
 func setup6(args ...string) (handler.Handler6, error) {
