@@ -45,9 +45,6 @@ using GoReleaser.
 To include detailed build metadata, ensure the following environment variables
 are set:
 
-* __GIT_STATE__: Indicates whether there are uncommitted changes in the working
-  directory. Set to clean if the repository is clean, or dirty if there are
-uncommitted changes.
 * __BUILD_HOST__: The hostname of the machine where the build is being
   performed.
 * __GO_VERSION__: The version of Go used for the build. GoReleaser uses this to

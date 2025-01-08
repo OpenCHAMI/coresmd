@@ -1,6 +1,6 @@
 package version
 
-import "fmt"
+import "runtime"
 
 // GitCommit stores the latest Git commit hash.
 // Set via -ldflags "-X main.GitCommit=$(git rev-parse HEAD)"
@@ -39,20 +39,26 @@ var GoVersion string
 // Set via -ldflags "-X main.BuildUser=$(whoami)"
 var BuildUser string
 
-// PrintVersionInfo outputs all versioning information for troubleshooting or version checks.
-func PrintVersionInfo() {
-	fmt.Printf("Version: %s\n", Version)
-	fmt.Printf("Git Commit: %s\n", GitCommit)
-	fmt.Printf("Build Time: %s\n", BuildTime)
-	fmt.Printf("Git Branch: %s\n", GitBranch)
-	fmt.Printf("Git Tag: %s\n", GitTag)
-	fmt.Printf("Git State: %s\n", GitState)
-	fmt.Printf("Build Host: %s\n", BuildHost)
-	fmt.Printf("Go Version: %s\n", GoVersion)
-	fmt.Printf("Build User: %s\n", BuildUser)
-}
+// Compiler that built the running binary.
+var Compiler string = runtime.Compiler
 
-func VersionInfo() string {
-	return fmt.Sprintf("Version: %s, Git Commit: %s, Build Time: %s, Git Branch: %s, Git Tag: %s, Git State: %s, Build Host: %s, Go Version: %s, Build User: %s",
-		Version, GitCommit, BuildTime, GitBranch, GitTag, GitState, BuildHost, GoVersion, BuildUser)
+// CPU architecture of the running binary.
+var Arch string = runtime.GOARCH
+
+// OS the running binary was built for.
+var Os string = runtime.GOOS
+
+// VersionInfo is all of the fields above combined into a map to be logged.
+var VersionInfo = map[string]interface{}{
+	"version":         Version,
+	"tag":             GitTag,
+	"commit":          GitCommit,
+	"branch":          GitBranch,
+	"state":           GitState,
+	"build_timestamp": BuildTime,
+	"build_host":      BuildHost,
+	"build_user":      BuildUser,
+	"go_version":      GoVersion,
+	"arch":            Arch,
+	"os":              Os,
 }
