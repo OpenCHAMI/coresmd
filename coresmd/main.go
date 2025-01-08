@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +39,12 @@ var (
 	baseURL           *url.URL
 	bootScriptBaseURL *url.URL
 	leaseDuration     time.Duration
+	singlePort        bool
+)
+
+const (
+	defaultTFTPDirectory = "/tftpboot"
+	defaultTFTPPort      = 69
 )
 
 func setup6(args ...string) (handler.Handler6, error) {
@@ -48,8 +55,8 @@ func setup4(args ...string) (handler.Handler4, error) {
 	log.Infof("initializing coresmd/coresmd %s (%s), built %s", version.Version, version.GitCommit, version.BuildTime)
 
 	// Ensure all required args were passed
-	if len(args) != 5 {
-		return nil, errors.New("expected 5 arguments: base URL, boot script base URL, CA certificate path, cache duration, lease duration")
+	if len(args) != 6 {
+		return nil, errors.New("expected 6 arguments: base URL, boot script base URL, CA certificate path, cache duration, lease duration, single port mode")
 	}
 
 	// Create new SmdClient using first argument (base URL)
@@ -96,11 +103,23 @@ func setup4(args ...string) (handler.Handler4, error) {
 		return nil, fmt.Errorf("failed to parse lease duration: %w", err)
 	}
 
+	log.Debug("determining port mode")
+	singlePort, err = strconv.ParseBool(args[5])
+	if err != nil {
+		return nil, fmt.Errorf("invalid single port toggle '%s', use 'true' or 'false'", args[5])
+	}
+
 	cache.RefreshLoop()
 
 	// Start tftpserver
-	log.Info("starting TFTP server on port 69 with directory /tftpboot")
-	go startTFTPServer("/tftpboot")
+	log.Infof("starting TFTP server on port %d with directory %s", defaultTFTPPort, defaultTFTPDirectory)
+	server := &tftpServer{
+		directory:  defaultTFTPDirectory,
+		port:       defaultTFTPPort,
+		singlePort: singlePort,
+	}
+
+	go server.Start()
 
 	log.Infof("coresmd plugin initialized with base URL %s and validity duration %s", smdClient.BaseURL, cache.Duration.String())
 

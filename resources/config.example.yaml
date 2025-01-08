@@ -46,7 +46,10 @@ server4:
     #   4. Cache validity duration. Coresmd uses a pull-through cache to store
     #      network information and this is the duration to refresh that cache.
     #   5. Lease duration.
-    - coresmd: https://foobar.openchami.cluster http://172.16.0.253:8081 /root_ca/root_ca.crt 30s 1h
+    #   6. Whether to use single port mode. In this mode, the TFTP server will
+    #      send responses to the client's source port. This mode allows the
+    #      server to operate in a NATed environment.
+    - coresmd: https://foobar.openchami.cluster http://172.16.0.253:8081 /root_ca/root_ca.crt 30s 1h false
 
     # Any requests reaching this point are unknown to SMD and it is up to the
     # administrator to decide how to handle unknown packets.
