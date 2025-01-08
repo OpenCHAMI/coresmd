@@ -1,6 +1,9 @@
 package version
 
-import "fmt"
+import (
+	"fmt"
+	"runtime"
+)
 
 // GitCommit stores the latest Git commit hash.
 // Set via -ldflags "-X main.GitCommit=$(git rev-parse HEAD)"
@@ -38,6 +41,15 @@ var GoVersion string
 // BuildUser is the username of the person or system that initiated the build process.
 // Set via -ldflags "-X main.BuildUser=$(whoami)"
 var BuildUser string
+
+// Compiler that built the running binary.
+var Compiler string = runtime.Compiler
+
+// CPU architecture of the running binary.
+var Arch string = runtime.GOARCH
+
+// OS the running binary was built for.
+var Os string = runtime.GOOS
 
 // PrintVersionInfo outputs all versioning information for troubleshooting or version checks.
 func PrintVersionInfo() {
