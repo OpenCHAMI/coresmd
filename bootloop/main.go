@@ -54,12 +54,30 @@ var Plugin = plugins.Plugin{
 	Setup4: setup4,
 }
 
+func logVersion() {
+	log.Infof("initializing coresmd/bootloop %s (%s), built %s", version.Version, version.GitState, version.BuildTime)
+	log.WithFields(map[string]interface{}{
+		"version": version.Version,
+		"tag": version.GitTag,
+		"commit": version.GitCommit,
+		"branch": version.GitBranch,
+		"state": version.GitState,
+		"build_timestamp": version.BuildTime,
+		"build_host": version.BuildHost,
+		"build_user": version.BuildUser,
+		"go_version": version.GoVersion,
+		"arch": version.Arch,
+		"os": version.Os,
+	}).Debugln("detailed version info")
+}
+
 func setup6(args ...string) (handler.Handler6, error) {
+	logVersion()
 	return nil, errors.New("bootloop does not currently support DHCPv6")
 }
 
 func setup4(args ...string) (handler.Handler4, error) {
-	log.Infof("initializing coresmd/bootloop %s (%s), built %s", version.Version, version.GitCommit, version.BuildTime)
+	logVersion()
 
 	// Ensure all required args were passed
 	if len(args) != 5 {

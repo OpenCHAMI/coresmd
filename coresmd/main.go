@@ -47,12 +47,29 @@ const (
 	defaultTFTPPort      = 69
 )
 
+func logVersion() {
+	log.Infof("initializing coresmd/coresmd %s (%s), built %s", version.Version, version.GitState, version.BuildTime)
+	log.WithFields(map[string]interface{}{
+		"version": version.Version,
+		"tag": version.GitTag,
+		"commit": version.GitCommit,
+		"branch": version.GitBranch,
+		"state": version.GitState,
+		"build_timestamp": version.BuildTime,
+		"build_host": version.BuildHost,
+		"build_user": version.BuildUser,
+		"go_version": version.GoVersion,
+		"arch": version.Arch,
+		"os": version.Os,
+	}).Debugln("detailed version info")
+}
+
 func setup6(args ...string) (handler.Handler6, error) {
 	return nil, errors.New("coresmd does not currently support DHCPv6")
 }
 
 func setup4(args ...string) (handler.Handler4, error) {
-	log.Infof("initializing coresmd/coresmd %s (%s), built %s", version.Version, version.GitCommit, version.BuildTime)
+	logVersion()
 
 	// Ensure all required args were passed
 	if len(args) != 6 {
