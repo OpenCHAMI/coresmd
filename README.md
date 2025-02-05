@@ -1,57 +1,68 @@
-# coresmd
 
-<!-- Text width is 80, only use spaces and use 4 spaces instead of tabs -->
-<!-- vim: set et sta tw=80 ts=4 sw=4 sts=0: -->
+# CoreSMD
 
-A CoreDHCP plugin with a pull-through cache that uses
-[SMD](https://github.com/OpenCHAMI/smd) as its source of truth. This is part of
-the [OpenCHAMI](https://openchami.org) project.
+## Summary of Repo
 
-This repository contains two plugins:
+CoreSMD provides two plugins for [CoreDHCP](https://github.com/coredhcp/coredhcp) that integrate with [SMD](https://github.com/OpenCHAMI/smd). The first plugin, **coresmd**, uses SMD as a source of truth to provide DHCP leases. The second plugin, **bootloop**, dynamically assigns temporary IP addresses to unknown MACs until they can be updated in SMD.
 
-- **coresmd** --- The purpose of this plugin is to provide DHCP leases based on
-  data from SMD.
-- **bootloop** --- The purpose of this plugin is to be a "catch-all" that causes
-  nodes/BMCs/etc. unknown to SMD to get a temporary IP address from a pool with
-  a short, user-defined lease time. This is so that if they are ever added to
-  SMD, they will quickly get a longer lease from the **coresmd** plugin.
+---
 
-  An iPXE boot script that simply reboots is served to anything that can boot to
-  force the whole DHCP handshake (DORA) to reoccur to obtain a new lease. If the
-  plugin receives a DHCPREQUEST and its IP is already leased, a DHCPNAK is sent
-  so that it will reinitiate the entire DHCP handshake.
+## Table of Contents
 
-  The goal is to have any MAC addresses that are unknown continually try and get
-  a new IP address in the case they become known, but to also give them
-  (especially BMCs) a temporary IP address so that they can be discovered (e.g.
-  by [Magellan](https://github.com/OpenCHAMI/magellan).
+- [About / Introduction](#about--introduction)
+- [Overview](#overview)
+- [Build / Install](#build--install)
+  - [Build/Install with GoReleaser](#buildinstall-with-goreleaser)
+    - [Environment Variables](#environment-variables)
+    - [Building Locally with GoReleaser](#building-locally-with-goreleaser)
+    - [Container](#container)
+    - [Bare Metal](#bare-metal)
+- [Testing](#testing)
+- [Running](#running)
+  - [Configuration](#configuration)
+  - [Preparation: SMD and BSS](#preparation-smd-and-bss)
+  - [Preparation: TFTP](#preparation-tftp)
+  - [Running CoreDHCP](#running-coredhcp)
+- [More Reading](#more-reading)
 
-## Building
+---
 
-This is meant to be built statically into
-[CoreDHCP](https://github.com/coredhcp/coredhcp) using the
-[coredhcp-generator](https://github.com/coredhcp/coredhcp/blob/master/cmds/coredhcp-generator).
+## About / Introduction
 
+This repository is part of the [OpenCHAMI](https://openchami.org) project. It extends CoreDHCP by integrating it with the SMD service so DHCP leases can be centrally managed. There are two primary plugins:
 
-## Build/Install with goreleaser
+1. **coresmd**  
+   Provides DHCP leases based on data from SMD.
 
-This project uses [GoReleaser](https://goreleaser.com/) to automate releases and
-include additional build metadata such as commit info, build time, and
-versioning. Below is a guide on how to set up and build the project locally
-using GoReleaser.
+2. **bootloop**  
+   Assigns temporary IP addresses to unknown nodes. It also returns a DHCPNAK if it sees a node that has become known to SMD since its last lease, forcing a full DHCP handshake to get a new address (from **coresmd**).
 
-### Environment Variables
+The goal of **bootloop** is to ensure unknown nodes/BMCs continually attempt to get new IP addresses if they become known in SMD, while still having a short, discoverable address for tasks like [Magellan](https://github.com/OpenCHAMI/magellan).
 
-To include detailed build metadata, ensure the following environment variables
-are set:
+---
 
-* __BUILD_HOST__: The hostname of the machine where the build is being
-  performed.
-* __GO_VERSION__: The version of Go used for the build. GoReleaser uses this to
-  ensure consistent Go versioning information.
-* __BUILD_USER__: The username of the person or system performing the build.
+## Overview
 
-Set all the environment variables with:
+CoreSMD acts as a pull-through cache of DHCP information from SMD, ensuring that new or updated details in SMD can be reflected in DHCP lease assignments. This facilitates more dynamic environments where nodes might be added or changed frequently, and also simplifies discovery of unknown devices via the **bootloop** plugin.
+
+---
+
+## Build / Install
+
+The plugins in this repository can be built into CoreDHCP either using a container-based approach (via the provided Dockerfile) or by statically compiling them into CoreDHCP on bare metal. Additionally, this project uses [GoReleaser](https://goreleaser.com/) to automate releases and include build metadata.
+
+### Build/Install with GoReleaser
+
+#### Environment Variables
+
+To include detailed build metadata, ensure the following environment variables are set:
+
+- **BUILD_HOST**: The hostname of the machine where the build is performed.
+- **GO_VERSION**: The version of Go used for the build.
+- **BUILD_USER**: The username of the person or system performing the build.
+
+You can set them with:
+
 ```bash
 export GIT_STATE=$(if git diff-index --quiet HEAD --; then echo 'clean'; else echo 'dirty'; fi)
 export BUILD_HOST=$(hostname)
@@ -59,85 +70,53 @@ export GO_VERSION=$(go version | awk '{print $3}')
 export BUILD_USER=$(whoami)
 ```
 
-### Building Locally with GoReleaser
+#### Building Locally with GoReleaser
 
-Once the environment variables are set, you can build the project locally using
-GoReleaser in snapshot mode (to avoid publishing).
+1. [Install GoReleaser](https://goreleaser.com/install/) if not already present.
+2. Run GoReleaser in snapshot mode to produce a local build without publishing:
+   ```bash
+   goreleaser release --snapshot --skip-publish --clean
+   ```
+3. Check the `dist/` directory for the built binaries, which will include the embedded metadata.
 
+#### Container
 
-Follow the installation instructions from [GoReleaser’s
-documentation](https://goreleaser.com/install/).
+This repository includes a `Dockerfile` that builds CoreDHCP (with its core plugins) plus **coresmd** and **bootloop**:
 
-1. Run GoReleaser in snapshot mode with the --snapshot and --skip-publish flags
-   to create a local build without attempting to release it:
-  ```bash
-  goreleaser release --snapshot --skip publish --clean
-  ```
-2. Check the dist/ directory for the built binaries, which will include the
-   metadata from the environment variables. You can inspect the binary output
-   to confirm that the metadata was correctly embedded.
-
-
-### Container
-
-This repository includes a Dockerfile that builds CoreDHCP with its core plugins
-as well as this plugin.
-
-```
+```bash
 docker build . --tag coresmd:latest
 ```
 
-### Bare Metal
+#### Bare Metal
 
-Prerequisites:
+> **Note**: Certain source files in CoreDHCP only build on Linux. This may cause build errors on other platforms (e.g., macOS).  
 
-- go >= 1.21
-- git
-- bash
-- sed
+**Prerequisites**  
+- go >= 1.21  
+- git  
+- bash  
+- sed  
 
-**NOTE:** Certain source files in CoreDHCP only build on Linux, which will cause
-build errors when building on other platforms like Mac.
-
-It is recommended to do this within a clean directory.
-
-1. Create directory for generated source files:
-
-   ```
+1. Create a clean directory for build artifacts:
+   ```bash
    mkdir build
    ```
-
-1. Clone CoreSMD (**NOTE:** This is not *strictly* necessary for CoreDHCP, but
-   *is* necessary to include the plugin version).
-
-   ```
+2. Clone CoreSMD (this is **not strictly** required for building, but **is** needed if you want the plugin version included):
+   ```bash
    git clone https://github.com/OpenCHAMI/coresmd
+   cd coresmd
+   ./gen_version.bash
+   cd ..
    ```
-
-   Generate the plugin version:
-
-   ```
-   ./coresmd/gen_version.bash
-   ```
-
-1. Clone CoreDHCP and change the working directory to the coredhcp-generator
-   tool.
-
-   ```
+3. Clone CoreDHCP and switch to the `coredhcp-generator` directory:
+   ```bash
    git clone https://github.com/coredhcp/coredhcp
    cd coredhcp/cmds/coredhcp-generator
-   ```
-
-1. Build the generator.
-
-   ```
    go mod download
    go build
    ```
-
-1. Run the generator to generate the CoreDHCP source file.
-
-   ```
+4. Run the generator to produce CoreDHCP with **coresmd** and **bootloop**:
+   ```bash
    ./coredhcp-generator \
      -f core-plugins.txt \
      -t coredhcp.go.template \
@@ -145,86 +124,72 @@ It is recommended to do this within a clean directory.
      github.com/OpenCHAMI/coresmd/coresmd \
      github.com/OpenCHAMI/coresmd/bootloop
    ```
-
-   You should see output similar to the following:
-
-   ```
-   2024/10/25 10:33:42 Generating output file '../../../build/coredhcp.go' with 17 plugin(s):
-   2024/10/25 10:33:42   1) github.com/coredhcp/coredhcp/plugins/autoconfigure
-   2024/10/25 10:33:42   2) github.com/coredhcp/coredhcp/plugins/ipv6only
-   2024/10/25 10:33:42   3) github.com/coredhcp/coredhcp/plugins/nbp
-   2024/10/25 10:33:42   4) github.com/coredhcp/coredhcp/plugins/range
-   2024/10/25 10:33:42   5) github.com/coredhcp/coredhcp/plugins/leasetime
-   2024/10/25 10:33:42   6) github.com/coredhcp/coredhcp/plugins/mtu
-   2024/10/25 10:33:42   7) github.com/coredhcp/coredhcp/plugins/router
-   2024/10/25 10:33:42   8) github.com/OpenCHAMI/coresmd/bootloop
-   2024/10/25 10:33:42   9) github.com/coredhcp/coredhcp/plugins/sleep
-   2024/10/25 10:33:42  10) github.com/coredhcp/coredhcp/plugins/staticroute
-   2024/10/25 10:33:42  11) github.com/coredhcp/coredhcp/plugins/prefix
-   2024/10/25 10:33:42  12) github.com/coredhcp/coredhcp/plugins/serverid
-   2024/10/25 10:33:42  13) github.com/coredhcp/coredhcp/plugins/searchdomains
-   2024/10/25 10:33:42  14) github.com/OpenCHAMI/coresmd/coresmd
-   2024/10/25 10:33:42  15) github.com/coredhcp/coredhcp/plugins/dns
-   2024/10/25 10:33:42  16) github.com/coredhcp/coredhcp/plugins/file
-   2024/10/25 10:33:42  17) github.com/coredhcp/coredhcp/plugins/netmask
-   2024/10/25 10:33:42 Generated file '../../../build/coredhcp.go'. You can build it by running 'go build' in the output directory.
-   ../../../build
-   ```
-
-1. Change directory into the directory, initialize it as a Go module.
-
-   ```
+5. Initialize the build directory as a Go module and build CoreDHCP:
+   ```bash
    cd ../../../build
-   go mod init coredhcp   # the module name doesn't matter
+   go mod init coredhcp
    go mod edit -go=1.21
    go mod edit -replace=github.com/coredhcp/coredhcp=../coredhcp
    go mod edit -replace=github.com/OpenCHAMI/coresmd=../coresmd
    go mod tidy
-   ```
-
-1. Build CoreDHCP.
-
-   ```
    go build
    ```
 
-You'll now have a `coredhcp` binary in the current directory you can run.
+Your `coredhcp` binary (including these two plugins) will be in the `./build` directory.
 
-## Configuration
+---
 
-CoreDHCP requires a config file to run. An example `config.yaml` can be found at
-`resources/config.example.yaml`. That file contains comments on when/how to use
-the coresmd and bootloop plugins, including which arguments to pass.
+## Testing
 
-## Usage
+Currently, the repository does not include standalone test scripts for these plugins. However, once compiled into CoreDHCP, you can test the overall DHCP server behavior using tools like:
+
+- [dhcping](https://github.com/rickardw/dhcping)
+- [dnsmasq DHCP client testing](http://www.thekelleys.org.uk/dnsmasq/doc.html)
+
+Because the plugins integrate with SMD, also verify that your SMD instance is returning correct data, and confirm the environment variables (if using GoReleaser) are correctly embedded in the binary.
+
+---
+
+## Running
+
+### Configuration
+
+CoreDHCP requires a config file to run. See [`resources/config.example.yaml`](resources/config.example.yaml) for an example with detailed comments on how to enable and configure **coresmd** and **bootloop**.
 
 ### Preparation: SMD and BSS
 
-Before running CoreDHCP, the OpenCHAMI services (namely BSS and SMD) should
-already be configured and running using the base URL and boot script base URL
-configured in the CoreDHCP config file.
+Before running CoreDHCP, ensure the [OpenCHAMI](https://openchami.org) services (notably **BSS** and **SMD**) are configured and running. Their URLs should match what you configure in the CoreDHCP config file.
 
 ### Preparation: TFTP
 
-With default configuration, no preparation is needed.
-
-Coresmd comes with a built-in TFTP server that includes iPXE bootloader binaries
-for 32-/64-bit x86/ARM (EFI) and legacy x86 CPU architectures.
-
-When using the bootloop plugin, if the boot script path is set to "default" (see
-example config file), then the built-in reboot iPXE script is used for unknown
-nodes. This can be changed to a path in TFTP to an alternate custom iPXE boot
-script if different functionality is desired. Of course, whatever path is
-specified must exist on the TFTP server.
+By default, **coresmd** includes a built-in TFTP server with iPXE binaries for 32-/64-bit x86/ARM (EFI) and legacy x86. If you use the **bootloop** plugin and set the iPXE boot script path to `"default"`, it will serve a built-in reboot script to unknown nodes. Alternatively, you can point this to a custom TFTP path if different functionality is desired.
 
 ### Running CoreDHCP
 
-After the above prerequisites have been completed, CoreDHCP can be run with its
-config file. It can be run in a container or on bare metal, though if running
-via container host networking is required.
+Once all prerequisites are set, you can run CoreDHCP:
 
-For example, to run using Docker:
+- **Docker**  
+  Use host networking and mount your config file:
+  ```bash
+  docker run --rm \
+    --net=host \
+    -v /path/to/config.yaml:/etc/coredhcp/config.yaml:ro \
+    ghcr.io/OpenCHAMI/coresmd:latest
+  ```
 
-```
-docker run --rm -v <path_to_config_file>:/etc/coredhcp/config.yaml:ro ghcr.io/OpenCHAMI/coresmd:latest
-```
+- **Bare Metal**  
+  Execute the locally built binary:
+  ```bash
+  ./coredhcp -conf /path/to/config.yaml
+  ```
+
+---
+
+## More Reading
+
+- [CoreDHCP GitHub](https://github.com/coredhcp/coredhcp)
+- [OpenCHAMI Project](https://openchami.org)
+- [SMD GitHub](https://github.com/OpenCHAMI/smd)
+- [GoReleaser Documentation](https://goreleaser.com/install/)
+- [Magellan (OpenCHAMI)](https://github.com/OpenCHAMI/magellan)
+
