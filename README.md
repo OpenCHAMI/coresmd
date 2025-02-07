@@ -64,7 +64,6 @@ To include detailed build metadata, ensure the following environment variables a
 You can set them with:
 
 ```bash
-export GIT_STATE=$(if git diff-index --quiet HEAD --; then echo 'clean'; else echo 'dirty'; fi)
 export BUILD_HOST=$(hostname)
 export GO_VERSION=$(go version | awk '{print $3}')
 export BUILD_USER=$(whoami)
@@ -84,12 +83,13 @@ export BUILD_USER=$(whoami)
 This repository includes a `Dockerfile` that builds CoreDHCP (with its core plugins) plus **coresmd** and **bootloop**:
 
 ```bash
-docker build . --tag coresmd:latest
+docker build . --tag ghcr.io/openchami/coresmd:latest
 ```
 
 #### Bare Metal
 
-> **Note**: Certain source files in CoreDHCP only build on Linux. This may cause build errors on other platforms (e.g., macOS).  
+> [!NOTE]
+> Certain source files in CoreDHCP only build on Linux. This may cause build errors on other platforms (e.g., macOS).  
 
 **Prerequisites**  
 - go >= 1.21  
