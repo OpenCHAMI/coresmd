@@ -100,3 +100,9 @@ docker_manifests:
       - *amd64_linux_image
       - *arm64v8_linux_image
 
+release:
+  github:
+  draft: true
+  name_template: "v{{ .Version }}"
+  prerelease: auto
+  mode: replace
