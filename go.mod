@@ -15,7 +15,7 @@ require (
 )
 
 require (
-	github.com/spf13/pflag v1.0.6-0.20201009195203-85dd5c8bc61c // indirect
+	github.com/spf13/pflag v1.0.6-0.20201009195203-85dd5c8bc61c
 	golang.org/x/net v0.27.0 // indirect
 )
 
@@ -30,6 +30,7 @@ require (
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
+	github.com/google/gopacket v1.1.19 // indirect
 	github.com/google/pprof v0.0.0-20230509042627-b1315fad0c5a // indirect
 	github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect

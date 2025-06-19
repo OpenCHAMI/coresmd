@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-config
+  namespace: kube-system
+data:
+  Corefile: |
+    . {
+        coresmd {
+            smd_url https://smd.cluster.local
+            ca_cert /etc/ssl/certs/smd-ca.crt
+            cache_duration 60s
+            zone cluster.local {
+                nodes nid{04d}
+                bmcs bmc-{id}
+            }
+        }
+        prometheus 0.0.0.0:9153
+        forward . 8.8.8.8
+    } 

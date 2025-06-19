@@ -1,6 +1,6 @@
 version: 2
 
-project_name: coredhcp
+project_name: coresmd
 before:
   hooks:
   - go install github.com/coredhcp/coredhcp/cmds/coredhcp-generator@latest
@@ -8,6 +8,7 @@ before:
   - go mod tidy
 
 builds:
+  # CoreDHCP build
   - id: coredhcp
     main: ./coredhcp/
     goos:  # CoreDHCP only supports linux
@@ -42,6 +43,36 @@ builds:
             {{- if eq .Arch "amd64" -}}gcc{{- else -}}aarch64-linux-gnu-gcc{{- end -}}
         {{- end }}
 
+  # CoreDNS build
+  - id: coredns
+    main: ./coredns/
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    goamd64:
+      - v3
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+    ldflags:
+      - "-s -w \
+         -X github.com/OpenCHAMI/coresmd/internal/version.GitCommit={{ .Commit }} \
+         -X github.com/OpenCHAMI/coresmd/internal/version.BuildTime={{ .Date }} \
+         -X github.com/OpenCHAMI/coresmd/internal/version.Version={{ .Version }} \
+         -X github.com/OpenCHAMI/coresmd/internal/version.GitBranch={{ .Branch }} \
+         -X github.com/OpenCHAMI/coresmd/internal/version.GitTag={{ .Tag }} \
+         -X github.com/OpenCHAMI/coresmd/internal/version.GitState={{ .GitTreeState }} \
+         -X github.com/OpenCHAMI/coresmd/internal/version.BuildHost={{ .Env.BUILD_HOST }} \
+         -X github.com/OpenCHAMI/coresmd/internal/version.GoVersion={{ .Env.GO_VERSION }} \
+         -X github.com/OpenCHAMI/coresmd/internal/version.BuildUser={{ .Env.BUILD_USER }} "
+    binary: coredns
+    env:
+      - CGO_ENABLED=0
 
 dockers:
   - image_templates:
@@ -102,6 +133,8 @@ docker_manifests:
 
 release:
   github:
+    owner: OpenCHAMI
+    name: coresmd
   draft: true
   name_template: "v{{ .Version }}"
   prerelease: auto
