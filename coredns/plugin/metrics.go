@@ -1,4 +1,4 @@
-package coredns
+package plugin
 
 import (
 	"github.com/coredns/coredns/plugin"

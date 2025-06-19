@@ -1,4 +1,4 @@
-package coredns
+package plugin
 
 // Zone represents a DNS zone configuration
 type Zone struct {
