@@ -88,25 +88,43 @@ func setup(c *caddy.Controller) error {
 func parse(c *caddy.Controller) (*Plugin, error) {
 	p := &Plugin{}
 
+	// The outer for c.Next() handles each "coresmd" stanza in the Corefile.
+	// Typically you'd have only one, but this loop allows multiple if needed.
 	for c.Next() {
+		// The inner for c.NextBlock() loops through the directives
+		// that appear inside the "coresmd { ... }" block.
 		for c.NextBlock() {
 			switch c.Val() {
+
 			case "smd_url":
 				if !c.NextArg() {
 					return nil, c.ArgErr()
 				}
+				// Optional: Return an error if smd_url was already set
+				if p.smdURL != "" {
+					return nil, c.Errf("smd_url already specified")
+				}
 				p.smdURL = c.Val()
+
 			case "ca_cert":
 				if !c.NextArg() {
 					return nil, c.ArgErr()
 				}
 				p.caCert = c.Val()
+
 			case "cache_duration":
 				if !c.NextArg() {
 					return nil, c.ArgErr()
 				}
 				p.cacheDuration = c.Val()
+
 			case "zone":
+				// Example usage in Corefile:
+				//   zone cluster.local {
+				//       nodes nid{04d}
+				//       bmcs bmc-{id}
+				//   }
+				//
 				if !c.NextArg() {
 					return nil, c.ArgErr()
 				}
@@ -116,39 +134,53 @@ func parse(c *caddy.Controller) (*Plugin, error) {
 					return nil, err
 				}
 				p.zones = append(p.zones, zone)
+
 			default:
 				return nil, c.Errf("unknown directive '%s'", c.Val())
 			}
 		}
 	}
 
-	// Validate required configuration
+	// Final validation & defaults
 	if p.smdURL == "" {
 		return nil, fmt.Errorf("smd_url is required")
 	}
 	if p.cacheDuration == "" {
-		p.cacheDuration = "30s" // Default cache duration
+		p.cacheDuration = "30s"
 	}
 
 	return p, nil
 }
 
-// parseZone parses zone configuration blocks
+// parseZone reads the lines inside a "zone <name> { ... }" block.
 func parseZone(c *caddy.Controller, zoneName string) (Zone, error) {
 	zone := Zone{Name: zoneName}
 
-	for c.NextBlock() {
+	// A zone definition requires a block.
+	if !c.NextBlock() {
+		return zone, c.Errf("expected a block for zone '%s'", zoneName)
+	}
+
+	// Now, loop through the directives inside the block.
+	for c.Next() {
+		// When we see the closing brace, we're done with this block.
+		if c.Val() == "}" {
+			break
+		}
+
 		switch c.Val() {
 		case "nodes":
 			if !c.NextArg() {
 				return zone, c.ArgErr()
 			}
 			zone.NodePattern = c.Val()
+
 		case "bmcs":
 			if !c.NextArg() {
 				return zone, c.ArgErr()
 			}
 			zone.BMCPattern = c.Val()
+
 		default:
 			return zone, c.Errf("unknown zone directive '%s'", c.Val())
 		}
@@ -209,7 +241,11 @@ func (p *Plugin) OnStartup() error {
 				BMCPattern:  "bmc-{id}",
 			},
 		}
+	} else {
+		log.Infof("configured zones: %v", p.zones)
 	}
+	// Log cache initialization
+	log.Infof("coresmd cache initialized with %d zones", len(p.zones))
 
 	return nil
 }

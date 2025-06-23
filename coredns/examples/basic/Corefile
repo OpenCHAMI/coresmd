@@ -1,10 +1,14 @@
 # Basic CoreSMD CoreDNS Configuration
 # This configuration provides DNS resolution for OpenCHAMI cluster components
 
-. {
+.:1053 {
     coresmd {
-        smd_url https://smd.cluster.local
+        smd_url https://demo.openchami.cluster:8443
         cache_duration 30s
+        zone openchami.cluster {
+            nodes nid{04d}
+            bmcs bmc-{id}
+        }
     }
     prometheus 0.0.0.0:9153
     forward . 8.8.8.8

@@ -111,13 +111,16 @@ func (p *Plugin) lookupA(name string) net.IP {
 
 	// Check each zone for node or BMC patterns
 	for _, zone := range p.zones {
-		// Node pattern: e.g., nid0001.cluster.local
+		// Node pattern: e.g., nid0001.cluster.local or xname
 		if strings.HasSuffix(name, zone.Name) && zone.NodePattern != "" {
 			for _, ei := range p.cache.EthernetInterfaces {
 				if comp, ok := p.cache.Components[ei.ComponentID]; ok && comp.Type == "Node" {
-					host := strings.Replace(zone.NodePattern, "{04d}", fmt.Sprintf("%04d", comp.NID), 1)
-					hostFQDN := host + "." + zone.Name
-					if name == hostFQDN {
+					xnameHost := comp.ID // comp.ID is the xname
+					xnameFQDN := xnameHost + "." + zone.Name
+					nidHost := strings.Replace(zone.NodePattern, "{04d}", fmt.Sprintf("%04d", comp.NID), 1)
+					nidFQDN := nidHost + "." + zone.Name
+					if name == nidFQDN || name == xnameFQDN {
+						// Return the first IP address found for this EthernetInterface
 						if len(ei.IPAddresses) > 0 {
 							return net.ParseIP(ei.IPAddresses[0].IPAddress)
 						}
@@ -161,12 +164,12 @@ func (p *Plugin) lookupPTR(name string) string {
 						// Return node or BMC hostname
 						for _, zone := range p.zones {
 							if comp.Type == "Node" && zone.NodePattern != "" {
-								host := strings.Replace(zone.NodePattern, "{04d}", fmt.Sprintf("%04d", comp.NID), 1)
-								return host + "." + zone.Name
+								// host := strings.Replace(zone.NodePattern, "{04d}", fmt.Sprintf("%04d", comp.NID), 1)
+								return comp.ID + "." + zone.Name
 							}
 							if comp.Type == "NodeBMC" && zone.BMCPattern != "" {
-								host := strings.Replace(zone.BMCPattern, "{id}", comp.ID, 1)
-								return host + "." + zone.Name
+								// host := strings.Replace(zone.BMCPattern, "{id}", comp.ID, 1)
+								return comp.ID + "." + zone.Name
 							}
 						}
 					}
