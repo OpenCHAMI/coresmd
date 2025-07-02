@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -109,18 +111,17 @@ func (p *Plugin) lookupA(name string) net.IP {
 	p.cache.Mutex.RLock()
 	defer p.cache.Mutex.RUnlock()
 
-	// Check each zone for node or BMC patterns
 	for _, zone := range p.zones {
-		// Node pattern: e.g., nid0001.cluster.local or xname
 		if strings.HasSuffix(name, zone.Name) && zone.NodePattern != "" {
 			for _, ei := range p.cache.EthernetInterfaces {
 				if comp, ok := p.cache.Components[ei.ComponentID]; ok && comp.Type == "Node" {
-					xnameHost := comp.ID // comp.ID is the xname
+					xnameHost := comp.ID
 					xnameFQDN := xnameHost + "." + zone.Name
-					nidHost := strings.Replace(zone.NodePattern, "{04d}", fmt.Sprintf("%04d", comp.NID), 1)
+
+					nidHost := expandPattern(zone.NodePattern, comp.NID, comp.ID)
 					nidFQDN := nidHost + "." + zone.Name
+
 					if name == nidFQDN || name == xnameFQDN {
-						// Return the first IP address found for this EthernetInterface
 						if len(ei.IPAddresses) > 0 {
 							return net.ParseIP(ei.IPAddresses[0].IPAddress)
 						}
@@ -132,7 +133,7 @@ func (p *Plugin) lookupA(name string) net.IP {
 		if strings.HasSuffix(name, zone.Name) && zone.BMCPattern != "" {
 			for _, ei := range p.cache.EthernetInterfaces {
 				if comp, ok := p.cache.Components[ei.ComponentID]; ok && comp.Type == "NodeBMC" {
-					host := strings.Replace(zone.BMCPattern, "{id}", comp.ID, 1)
+					host := expandPattern(zone.BMCPattern, comp.NID, comp.ID)
 					hostFQDN := host + "." + zone.Name
 					if name == hostFQDN {
 						if len(ei.IPAddresses) > 0 {
@@ -198,6 +199,18 @@ func reverseToIP(name string) net.IP {
 		parts[i], parts[j] = parts[j], parts[i]
 	}
 	return net.ParseIP(strings.Join(parts, "."))
+}
+
+// expandPattern replaces {Nd} with zero-padded NID and {id} with xname
+func expandPattern(pattern string, nid int64, id string) string {
+	out := strings.ReplaceAll(pattern, "{id}", id)
+	re := regexp.MustCompile(`\{0*(\d+)d\}`)
+	out = re.ReplaceAllStringFunc(out, func(m string) string {
+		nStr := re.FindStringSubmatch(m)[1]
+		n, _ := strconv.Atoi(nStr)
+		return fmt.Sprintf("%0*d", n, nid)
+	})
+	return out
 }
 
 // Name returns the plugin name

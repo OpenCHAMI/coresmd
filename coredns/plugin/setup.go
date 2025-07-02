@@ -156,31 +156,18 @@ func parse(c *caddy.Controller) (*Plugin, error) {
 func parseZone(c *caddy.Controller, zoneName string) (Zone, error) {
 	zone := Zone{Name: zoneName}
 
-	// A zone definition requires a block.
-	if !c.NextBlock() {
-		return zone, c.Errf("expected a block for zone '%s'", zoneName)
-	}
-
-	// Now, loop through the directives inside the block.
-	for c.Next() {
-		// When we see the closing brace, we're done with this block.
-		if c.Val() == "}" {
-			break
-		}
-
+	for c.NextBlock() {
 		switch c.Val() {
 		case "nodes":
 			if !c.NextArg() {
 				return zone, c.ArgErr()
 			}
 			zone.NodePattern = c.Val()
-
 		case "bmcs":
 			if !c.NextArg() {
 				return zone, c.ArgErr()
 			}
 			zone.BMCPattern = c.Val()
-
 		default:
 			return zone, c.Errf("unknown zone directive '%s'", c.Val())
 		}
