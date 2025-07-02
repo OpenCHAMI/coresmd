@@ -125,10 +125,19 @@ func TestParseConfigurationDefaultCacheDuration(t *testing.T) {
 }
 
 func TestParseZoneConfiguration(t *testing.T) {
-	corefile := `nodes nid{04d}
-		bmcs bmc-{id}`
+	corefile := `zone cluster.local {
+        nodes nid{04d}
+        bmcs bmc-{id}
+    }`
 
 	c := caddy.NewTestController("dns", corefile)
+	// Advance to the "zone" directive and its argument
+	if !c.Next() {
+		t.Fatal("Failed to advance to zone directive")
+	}
+	if !c.NextArg() {
+		t.Fatal("Failed to advance to zone argument")
+	}
 	zone, err := parseZone(c, "cluster.local")
 
 	if err != nil {
@@ -139,12 +148,12 @@ func TestParseZoneConfiguration(t *testing.T) {
 		t.Errorf("Expected zone name to be 'cluster.local', got '%s'", zone.Name)
 	}
 
-	if zone.NodePattern == "" {
-		t.Log("NodePattern is empty (expected due to test controller positioning)")
+	if zone.NodePattern != "nid{04d}" {
+		t.Errorf("Expected NodePattern to be 'nid{04d}', got '%s'", zone.NodePattern)
 	}
 
-	if zone.BMCPattern == "" {
-		t.Log("BMCPattern is empty (expected due to test controller positioning)")
+	if zone.BMCPattern != "bmc-{id}" {
+		t.Errorf("Expected BMCPattern to be 'bmc-{id}', got '%s'", zone.BMCPattern)
 	}
 }
 

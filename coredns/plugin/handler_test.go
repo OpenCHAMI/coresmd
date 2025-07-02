@@ -237,8 +237,9 @@ func TestServeDNS_PTR_Record_Node(t *testing.T) {
 
 	// Check PTR record
 	if ptr, ok := w.msg.Answer[0].(*dns.PTR); ok {
-		if ptr.Ptr != "nid0001.cluster.local." {
-			t.Errorf("Expected PTR nid0001.cluster.local., got %s", ptr.Ptr)
+		// Always expect the xname, not the NodePattern
+		if ptr.Ptr != "node001.cluster.local." {
+			t.Errorf("Expected PTR node001.cluster.local., got %s", ptr.Ptr)
 		}
 		if ptr.Hdr.Name != "10.1.168.192.in-addr.arpa." {
 			t.Errorf("Expected name 10.1.168.192.in-addr.arpa., got %s", ptr.Hdr.Name)
@@ -282,8 +283,9 @@ func TestServeDNS_PTR_Record_BMC(t *testing.T) {
 
 	// Check PTR record
 	if ptr, ok := w.msg.Answer[0].(*dns.PTR); ok {
-		if ptr.Ptr != "bmc-bmc001.cluster.local." {
-			t.Errorf("Expected PTR bmc-bmc001.cluster.local., got %s", ptr.Ptr)
+		// Always expect the xname, not the BMCPattern
+		if ptr.Ptr != "bmc001.cluster.local." {
+			t.Errorf("Expected PTR bmc001.cluster.local., got %s", ptr.Ptr)
 		}
 		if ptr.Hdr.Name != "100.1.168.192.in-addr.arpa." {
 			t.Errorf("Expected name 100.1.168.192.in-addr.arpa., got %s", ptr.Hdr.Name)
@@ -559,4 +561,67 @@ func TestLookupA_Direct(t *testing.T) {
 		t.Errorf("Expected IP 192.168.1.10, got %v", ip)
 	}
 	t.Log("lookupA works correctly")
+}
+
+func makeTestPluginWithPattern(pattern string, nid int, xname, ip string) *Plugin {
+	return &Plugin{
+		zones: []Zone{
+			{
+				Name:        "test.cluster",
+				NodePattern: pattern,
+			},
+		},
+		cache: &coresmd.Cache{
+			Duration:    1 * time.Minute,
+			Client:      &coresmd.SmdClient{},
+			LastUpdated: time.Now(),
+			Mutex:       sync.RWMutex{},
+			EthernetInterfaces: map[string]coresmd.EthernetInterface{
+				xname + "-eth": {
+					MACAddress:  xname + "-eth",
+					ComponentID: xname,
+					Type:        "Node",
+					Description: "Test Node Interface",
+					IPAddresses: []struct {
+						IPAddress string `json:"IPAddress"`
+					}{
+						{IPAddress: ip},
+					},
+				},
+			},
+			Components: map[string]coresmd.Component{
+				xname: {
+					ID:   xname,
+					NID:  int64(nid),
+					Type: "Node",
+				},
+			},
+		},
+	}
+}
+
+func TestLookupA_Patterns(t *testing.T) {
+	tests := []struct {
+		pattern string
+		nid     int
+		xname   string
+		ip      string
+		want    []string // hostnames to test
+	}{
+		{"nid{04d}", 1, "x1000c0s0b0n0", "10.0.0.1", []string{"nid0001.test.cluster", "x1000c0s0b0n0.test.cluster"}},
+		{"re{03d}", 7, "x1000c0s0b0n7", "10.0.0.7", []string{"re007.test.cluster", "x1000c0s0b0n7.test.cluster"}},
+		{"fe{02d}", 12, "x1000c0s0b0n12", "10.0.0.12", []string{"fe12.test.cluster", "x1000c0s0b0n12.test.cluster"}},
+		{"node-{05d}", 42, "x1000c0s0b0n42", "10.0.0.42", []string{"node-00042.test.cluster", "x1000c0s0b0n42.test.cluster"}},
+		{"compute-{05d}", 123, "x1000c0s0b0n123", "10.0.1.23", []string{"compute-00123.test.cluster", "x1000c0s0b0n123.test.cluster"}},
+	}
+
+	for _, tt := range tests {
+		p := makeTestPluginWithPattern(tt.pattern, tt.nid, tt.xname, tt.ip)
+		for _, hostname := range tt.want {
+			got := p.lookupA(hostname)
+			if got == nil || got.String() != tt.ip {
+				t.Errorf("pattern %q, hostname %q: got %v, want %v", tt.pattern, hostname, got, tt.ip)
+			}
+		}
+	}
 }
