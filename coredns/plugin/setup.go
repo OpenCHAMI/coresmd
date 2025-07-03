@@ -156,8 +156,15 @@ func parse(c *caddy.Controller) (*Plugin, error) {
 func parseZone(c *caddy.Controller, zoneName string) (Zone, error) {
 	zone := Zone{Name: zoneName}
 
+	// Consume the opening brace
+	if !c.Next() {
+		return zone, c.Errf("expected opening brace after zone name")
+	}
+
+	// Read the directives inside the zone block
 	for c.NextBlock() {
-		switch c.Val() {
+		directive := c.Val()
+		switch directive {
 		case "nodes":
 			if !c.NextArg() {
 				return zone, c.ArgErr()
@@ -169,7 +176,7 @@ func parseZone(c *caddy.Controller, zoneName string) (Zone, error) {
 			}
 			zone.BMCPattern = c.Val()
 		default:
-			return zone, c.Errf("unknown zone directive '%s'", c.Val())
+			return zone, c.Errf("unknown zone directive '%s'", directive)
 		}
 	}
 

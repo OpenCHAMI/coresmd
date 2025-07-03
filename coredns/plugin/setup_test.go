@@ -124,62 +124,58 @@ func TestParseConfigurationDefaultCacheDuration(t *testing.T) {
 	}
 }
 
-func TestParseZoneConfiguration(t *testing.T) {
-	corefile := `zone cluster.local {
-        nodes nid{04d}
-        bmcs bmc-{id}
-    }`
+func TestParseFullCorefileExample(t *testing.T) {
+	corefile := `
+.:1053 {
+    coresmd {
+        smd_url https://demo.openchami.cluster:8443
+        cache_duration 30s
+        zone openchami.cluster {
+            nodes nid{04d}
+            bmcs bmc-{id}
+        }
+    }
+    prometheus 0.0.0.0:9153
+    forward . 8.8.8.8
+}`
 
 	c := caddy.NewTestController("dns", corefile)
-	// Advance to the "zone" directive and its argument
+	// Advance to the server block
 	if !c.Next() {
-		t.Fatal("Failed to advance to zone directive")
+		t.Fatal("Failed to advance to server block")
 	}
-	if !c.NextArg() {
-		t.Fatal("Failed to advance to zone argument")
+	// Advance to the coresmd plugin block
+	found := false
+	for c.NextBlock() {
+		if c.Val() == "coresmd" {
+			plugin, err := parse(c)
+			if err != nil {
+				t.Fatalf("Expected no error, got %v", err)
+			}
+			if plugin == nil {
+				t.Fatal("Expected plugin to be created")
+			}
+			if plugin.smdURL != "https://demo.openchami.cluster:8443" {
+				t.Errorf("Expected smd_url to be 'https://demo.openchami.cluster:8443', got '%s'", plugin.smdURL)
+			}
+			if len(plugin.zones) != 1 {
+				t.Fatalf("Expected 1 zone, got %d", len(plugin.zones))
+			}
+			zone := plugin.zones[0]
+			if zone.Name != "openchami.cluster" {
+				t.Errorf("Expected zone name to be 'openchami.cluster', got '%s'", zone.Name)
+			}
+			if zone.NodePattern != "nid{04d}" {
+				t.Errorf("Expected NodePattern to be 'nid{04d}', got '%s'", zone.NodePattern)
+			}
+			if zone.BMCPattern != "bmc-{id}" {
+				t.Errorf("Expected BMCPattern to be 'bmc-{id}', got '%s'", zone.BMCPattern)
+			}
+			found = true
+		}
 	}
-	zone, err := parseZone(c, "cluster.local")
-
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-
-	if zone.Name != "cluster.local" {
-		t.Errorf("Expected zone name to be 'cluster.local', got '%s'", zone.Name)
-	}
-
-	if zone.NodePattern != "nid{04d}" {
-		t.Errorf("Expected NodePattern to be 'nid{04d}', got '%s'", zone.NodePattern)
-	}
-
-	if zone.BMCPattern != "bmc-{id}" {
-		t.Errorf("Expected BMCPattern to be 'bmc-{id}', got '%s'", zone.BMCPattern)
-	}
-}
-
-func TestParseZoneConfigurationMissingArgument(t *testing.T) {
-	corefile := `nodes`
-
-	c := caddy.NewTestController("dns", corefile)
-	_, err := parseZone(c, "cluster.local")
-
-	if err != nil {
-		t.Logf("Got expected error: %v", err)
-	} else {
-		t.Log("No error returned (may be due to test controller behavior)")
-	}
-}
-
-func TestParseZoneConfigurationUnknownDirective(t *testing.T) {
-	corefile := `unknown_directive value`
-
-	c := caddy.NewTestController("dns", corefile)
-	_, err := parseZone(c, "cluster.local")
-
-	if err != nil {
-		t.Logf("Got expected error: %v", err)
-	} else {
-		t.Log("No error returned (may be due to test controller behavior)")
+	if !found {
+		t.Fatal("Did not find coresmd block in Corefile")
 	}
 }
 
