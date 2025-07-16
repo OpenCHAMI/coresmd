@@ -28,7 +28,7 @@ examples/
 
 2. **Run with basic configuration:**
    ```bash
-   ./dist/linux_amd64/coredns_linux_amd64_v1/coredns -conf coredns/examples/basic/Corefile
+   ./dist/coredns_linux_amd64_v1/coredns -conf coredns/examples/basic/Corefile
    ```
 
 3. **Run with advanced configuration:**
