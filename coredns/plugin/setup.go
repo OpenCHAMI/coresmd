@@ -94,7 +94,10 @@ func parse(c *caddy.Controller) (*Plugin, error) {
 		// The inner for c.NextBlock() loops through the directives
 		// that appear inside the "coresmd { ... }" block.
 		for c.NextBlock() {
-			switch c.Val() {
+			directive := c.Val()
+			log.Debugf("Parsing directive: %s", directive)
+
+			switch directive {
 
 			case "smd_url":
 				if !c.NextArg() {
@@ -105,18 +108,21 @@ func parse(c *caddy.Controller) (*Plugin, error) {
 					return nil, c.Errf("smd_url already specified")
 				}
 				p.smdURL = c.Val()
+				log.Debugf("Set smd_url to: %s", p.smdURL)
 
 			case "ca_cert":
 				if !c.NextArg() {
 					return nil, c.ArgErr()
 				}
 				p.caCert = c.Val()
+				log.Debugf("Set ca_cert to: %s", p.caCert)
 
 			case "cache_duration":
 				if !c.NextArg() {
 					return nil, c.ArgErr()
 				}
 				p.cacheDuration = c.Val()
+				log.Debugf("Set cache_duration to: %s", p.cacheDuration)
 
 			case "zone":
 				// Example usage in Corefile:
@@ -129,14 +135,16 @@ func parse(c *caddy.Controller) (*Plugin, error) {
 					return nil, c.ArgErr()
 				}
 				zoneName := c.Val()
+				log.Debugf("Parsing zone: %s", zoneName)
 				zone, err := parseZone(c, zoneName)
 				if err != nil {
 					return nil, err
 				}
 				p.zones = append(p.zones, zone)
+				log.Debugf("Added zone: %+v", zone)
 
 			default:
-				return nil, c.Errf("unknown directive '%s'", c.Val())
+				return nil, c.Errf("unknown directive '%s'", directive)
 			}
 		}
 	}
@@ -156,14 +164,21 @@ func parse(c *caddy.Controller) (*Plugin, error) {
 func parseZone(c *caddy.Controller, zoneName string) (Zone, error) {
 	zone := Zone{Name: zoneName}
 
-	// Consume the opening brace
+	// Enter the block for the zone directive (consume the opening brace if present)
 	if !c.Next() {
-		return zone, c.Errf("expected opening brace after zone name")
+		return zone, c.Errf("expected opening brace or directive after zone name")
+	}
+	if c.Val() != "{" {
+		return zone, c.Errf("expected '{' after zone name, got '%s'", c.Val())
 	}
 
 	// Read the directives inside the zone block
-	for c.NextBlock() {
+	for c.Next() {
 		directive := c.Val()
+		if directive == "}" || directive == "zone" {
+			// End of this zone block or start of a new zone
+			break
+		}
 		switch directive {
 		case "nodes":
 			if !c.NextArg() {
