@@ -164,6 +164,10 @@ func parse(c *caddy.Controller) (*Plugin, error) {
 func parseZone(c *caddy.Controller, zoneName string) (Zone, error) {
 	zone := Zone{Name: zoneName}
 
+	// Track whether directives have already been seen to prevent duplicates
+	seenNodes := false
+	seenBMCs := false
+
 	// Enter the block for the zone directive (consume the opening brace if present)
 	if !c.Next() {
 		return zone, c.Errf("expected opening brace or directive after zone name")
@@ -181,15 +185,23 @@ func parseZone(c *caddy.Controller, zoneName string) (Zone, error) {
 		}
 		switch directive {
 		case "nodes":
+			if seenNodes {
+				return zone, c.Errf("duplicate 'nodes' directive in zone '%s'", zoneName)
+			}
 			if !c.NextArg() {
 				return zone, c.ArgErr()
 			}
 			zone.NodePattern = c.Val()
+			seenNodes = true
 		case "bmcs":
+			if seenBMCs {
+				return zone, c.Errf("duplicate 'bmcs' directive in zone '%s'", zoneName)
+			}
 			if !c.NextArg() {
 				return zone, c.ArgErr()
 			}
 			zone.BMCPattern = c.Val()
+			seenBMCs = true
 		default:
 			return zone, c.Errf("unknown zone directive '%s'", directive)
 		}

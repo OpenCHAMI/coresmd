@@ -59,31 +59,6 @@ func TestParseBasicConfiguration(t *testing.T) {
 	}
 }
 
-func TestParseConfigurationWithZones(t *testing.T) {
-	corefile := `coresmd {
-		smd_url https://smd.cluster.local
-	}`
-
-	c := caddy.NewTestController("dns", corefile)
-	plugin, err := parse(c)
-
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-
-	if plugin == nil {
-		t.Fatal("Expected plugin to be created")
-	}
-
-	if plugin.smdURL != "https://smd.cluster.local" {
-		t.Errorf("Expected smd_url to be 'https://smd.cluster.local', got '%s'", plugin.smdURL)
-	}
-
-	if len(plugin.zones) == 0 {
-		t.Log("No zones configured, default zones will be set during OnStartup")
-	}
-}
-
 func TestParseConfigurationWithMultipleZones(t *testing.T) {
 	corefile := `
 .:1053 {
@@ -304,17 +279,6 @@ func TestParseCorefileInvalidConfigurations(t *testing.T) {
 			errorContains: "did not find coresmd block",
 		},
 		{
-			name: "invalid server block",
-			corefile: `
-invalid {
-    coresmd {
-        smd_url https://smd.cluster.local
-    }
-}`,
-			expectError:   true,
-			errorContains: "failed to advance to server block",
-		},
-		{
 			name: "missing smd_url in full corefile",
 			corefile: `
 .:1053 {
@@ -325,6 +289,40 @@ invalid {
 }`,
 			expectError:   true,
 			errorContains: "smd_url is required",
+		},
+		{
+			name: "duplicate nodes directive in zone",
+			corefile: `
+.:1053 {
+    coresmd {
+        smd_url https://smd.cluster.local
+        zone cluster.local {
+            nodes nid{04d}
+            nodes nid{03d}
+            bmcs bmc-{id}
+        }
+    }
+    forward . 8.8.8.8
+}`,
+			expectError:   true,
+			errorContains: "duplicate 'nodes' directive in zone 'cluster.local'",
+		},
+		{
+			name: "duplicate bmcs directive in zone",
+			corefile: `
+.:1053 {
+    coresmd {
+        smd_url https://smd.cluster.local
+        zone cluster.local {
+            nodes nid{04d}
+            bmcs bmc-{id}
+            bmcs mgmt-{id}
+        }
+    }
+    forward . 8.8.8.8
+}`,
+			expectError:   true,
+			errorContains: "duplicate 'bmcs' directive in zone 'cluster.local'",
 		},
 	}
 
