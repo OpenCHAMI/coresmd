@@ -5,16 +5,46 @@ metadata:
   namespace: kube-system
 data:
   Corefile: |
+    # CoreSMD CoreDNS Configuration for Kubernetes
+    # This configuration provides DNS resolution for OpenCHAMI cluster components
+    # within a Kubernetes environment
+    # 
+    # The coresmd plugin integrates with the OpenCHAMI SMD (State Management Database)
+    # to provide dynamic DNS resolution for compute nodes and BMCs based on their
+    # hardware addresses and component information stored in SMD.
+    # 
+    # In Kubernetes, this ConfigMap is mounted into the CoreDNS container and
+    # provides the DNS configuration for the cluster's internal DNS service.
+    
+    # Main DNS server block - handles all queries
     . {
+        # CoreSMD plugin configuration
         coresmd {
+            # URL of the SMD server that provides component information
+            # In Kubernetes, this should be accessible from within the cluster
             smd_url https://smd.cluster.local
+            
+            # CA certificate for validating SMD server TLS certificate
+            # This certificate should be mounted as a volume in the CoreDNS deployment
             ca_cert /etc/ssl/certs/smd-ca.crt
+            
+            # Cache duration for SMD data (60 seconds)
+            # Longer cache reduces SMD server load in production environments
             cache_duration 60s
+            
+            # Zone configuration for cluster.local domain
             zone cluster.local {
+                # Pattern for compute node hostnames: nid0001, nid0002, etc.
                 nodes nid{04d}
+                # Pattern for BMC hostnames: bmc-001, bmc-002, etc.
                 bmcs bmc-{id}
             }
         }
+        
+        # Prometheus metrics endpoint for monitoring
+        # Accessible at :9153/metrics for monitoring and alerting
         prometheus 0.0.0.0:9153
+        
+        # Forward all other queries to upstream DNS servers
         forward . 8.8.8.8
     } 

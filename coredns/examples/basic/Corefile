@@ -1,15 +1,32 @@
 # Basic CoreSMD CoreDNS Configuration
 # This configuration provides DNS resolution for OpenCHAMI cluster components
+# 
+# The coresmd plugin integrates with the OpenCHAMI SMD (State Management Database)
+# to provide dynamic DNS resolution for compute nodes and BMCs (Baseboard Management Controllers)
+# based on their hardware addresses and component information.
 
+# Main DNS server block - listens on port 1053
 .:1053 {
+    # CoreSMD plugin configuration
     coresmd {
+        # URL of the SMD server that provides component information
         smd_url https://demo.openchami.cluster:8443
+        
+        # How long to cache SMD data before refreshing (30 seconds)
         cache_duration 30s
+        
+        # Zone configuration for openchami.cluster domain
         zone openchami.cluster {
+            # Pattern for node hostnames: nid0001, nid0002, etc.
             nodes nid{04d}
+            # Pattern for BMC hostnames: bmc-001, bmc-002, etc.
             bmcs bmc-{id}
         }
     }
+    
+    # Prometheus metrics endpoint for monitoring
     prometheus 0.0.0.0:9153
+    
+    # Forward all other queries to Google's DNS servers
     forward . 8.8.8.8
 } 
