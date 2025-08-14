@@ -112,14 +112,18 @@ func (p *Plugin) lookupA(name string) net.IP {
 	defer p.cache.Mutex.RUnlock()
 
 	for _, zone := range p.zones {
-		if strings.HasSuffix(name, zone.Name) && zone.NodePattern != "" {
+		if strings.HasSuffix(name, zone.Name) {
 			for _, ei := range p.cache.EthernetInterfaces {
 				if comp, ok := p.cache.Components[ei.ComponentID]; ok && comp.Type == "Node" {
 					xnameHost := comp.ID
 					xnameFQDN := xnameHost + "." + zone.Name
-
-					nidHost := expandPattern(zone.NodePattern, comp.NID, comp.ID)
-					nidFQDN := nidHost + "." + zone.Name
+					// Expand node pattern
+					nidFQDN := ""
+					if zone.NodePattern != "" {
+						// nid{04d} pattern: e.g., nid0001.cluster.local
+						nidHost := expandPattern(zone.NodePattern, comp.NID, comp.ID)
+						nidFQDN = nidHost + "." + zone.Name
+					}
 
 					if name == nidFQDN || name == xnameFQDN {
 						if len(ei.IPAddresses) > 0 {
@@ -130,12 +134,18 @@ func (p *Plugin) lookupA(name string) net.IP {
 			}
 		}
 		// BMC pattern: e.g., bmc-xname.cluster.local
-		if strings.HasSuffix(name, zone.Name) && zone.BMCPattern != "" {
+		if strings.HasSuffix(name, zone.Name) {
 			for _, ei := range p.cache.EthernetInterfaces {
 				if comp, ok := p.cache.Components[ei.ComponentID]; ok && comp.Type == "NodeBMC" {
-					host := expandPattern(zone.BMCPattern, comp.NID, comp.ID)
-					hostFQDN := host + "." + zone.Name
-					if name == hostFQDN {
+					xnameHost := comp.ID
+					xnameFQDN := xnameHost + "." + zone.Name
+					hostFQDN := ""
+					// Expand BMC pattern
+					if zone.BMCPattern != "" {
+						host := expandPattern(zone.BMCPattern, comp.NID, comp.ID)
+						hostFQDN = host + "." + zone.Name
+					}
+					if name == hostFQDN || name == xnameFQDN {
 						if len(ei.IPAddresses) > 0 {
 							return net.ParseIP(ei.IPAddresses[0].IPAddress)
 						}

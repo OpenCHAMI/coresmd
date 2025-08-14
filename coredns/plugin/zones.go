@@ -1,5 +1,7 @@
 package plugin
 
+import "strings"
+
 // Zone represents a DNS zone configuration
 type Zone struct {
 	Name        string // Zone name (e.g., "cluster.local")
@@ -21,25 +23,23 @@ func NewZoneManager(zones []Zone) *ZoneManager {
 
 // FindZone finds the appropriate zone for a given domain name
 func (zm *ZoneManager) FindZone(domain string) *Zone {
-	for _, zone := range zm.zones {
-		if isSubdomain(domain, zone.Name) {
-			return &zone
+	for i := range zm.zones {
+		if isSubdomain(domain, zm.zones[i].Name) {
+			return &zm.zones[i]
 		}
 	}
 	return nil
 }
 
-// isSubdomain checks if domain is a subdomain of zone
+// isSubdomain checks if domain is a subdomain of zone.
+// It normalizes both domain and zone to ensure trailing dots and lowercase.
+// Returns true if domain is equal to zone or ends with ".zone".
 func isSubdomain(domain, zone string) bool {
-	// Simple subdomain check - in a real implementation, this would be more sophisticated
-	if len(domain) <= len(zone) {
-		return false
-	}
+	d := strings.TrimSuffix(strings.ToLower(domain), ".")
+	z := strings.TrimSuffix(strings.ToLower(zone), ".")
 
-	// Check if domain ends with zone
-	if len(domain) > len(zone) && domain[len(domain)-len(zone)-1] == '.' {
-		return domain[len(domain)-len(zone):] == zone
+	if d == z {
+		return true
 	}
-
-	return false
+	return strings.HasSuffix(d, "."+z)
 }

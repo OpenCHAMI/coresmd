@@ -625,3 +625,168 @@ func TestLookupA_Patterns(t *testing.T) {
 		}
 	}
 }
+
+// createTestPluginForBugReport creates a plugin to reproduce the reported bug scenarios
+func createTestPluginForBugReport() *Plugin {
+	cache := &coresmd.Cache{
+		Duration:    1 * time.Minute,
+		Client:      &coresmd.SmdClient{},
+		LastUpdated: time.Now(),
+		Mutex:       sync.RWMutex{},
+		EthernetInterfaces: map[string]coresmd.EthernetInterface{
+			// BMC with xname x3000c0s0b1 and NID 2 for pattern bmc{03d} = bmc002
+			"11:22:33:44:55:66": {
+				MACAddress:  "11:22:33:44:55:66",
+				ComponentID: "x3000c0s0b1",
+				Type:        "NodeBMC",
+				Description: "BMC for bug report test",
+				IPAddresses: []struct {
+					IPAddress string `json:"IPAddress"`
+				}{
+					{IPAddress: "192.168.100.10"},
+				},
+			},
+		},
+		Components: map[string]coresmd.Component{
+			"x3000c0s0b1": {
+				ID:   "x3000c0s0b1",
+				NID:  2,
+				Type: "NodeBMC",
+			},
+		},
+	}
+
+	return &Plugin{
+		zones: []Zone{
+			{
+				Name:        "redondo.usrc",
+				NodePattern: "nid{04d}",
+				BMCPattern:  "bmc{03d}",
+			},
+		},
+		cache: cache,
+	}
+}
+
+// TestServeDNS_BMC_XName_BugReport tests the reported bug for BMC xname lookup
+func TestServeDNS_BMC_XName_BugReport(t *testing.T) {
+	p := createTestPluginForBugReport()
+	mock := &mockHandler{}
+	p.Next = mock
+
+	// Test the exact query from the bug report: x3000c0s0b1.redondo.usrc
+	req := new(dns.Msg)
+	req.SetQuestion("x3000c0s0b1.redondo.usrc.", dns.TypeA)
+
+	w := &mockResponseWriter{}
+
+	rcode, err := p.ServeDNS(context.Background(), w, req)
+
+	if err != nil {
+		t.Fatalf("ServeDNS failed: %v", err)
+	}
+
+	if rcode != dns.RcodeSuccess {
+		t.Errorf("Expected rcode %d (SUCCESS), got %d", dns.RcodeSuccess, rcode)
+		t.Logf("This reproduces the bug - BMC xname lookup fails")
+	}
+
+	if len(w.msg.Answer) != 1 {
+		t.Fatalf("Expected 1 answer, got %d - this reproduces the bug", len(w.msg.Answer))
+	}
+
+	// Check A record
+	if a, ok := w.msg.Answer[0].(*dns.A); ok {
+		if !a.A.Equal(net.ParseIP("192.168.100.10")) {
+			t.Errorf("Expected IP 192.168.100.10, got %v", a.A)
+		}
+		if a.Hdr.Name != "x3000c0s0b1.redondo.usrc." {
+			t.Errorf("Expected name x3000c0s0b1.redondo.usrc., got %s", a.Hdr.Name)
+		}
+	} else {
+		t.Fatal("Answer is not an A record")
+	}
+
+	// Should not call next plugin
+	if mock.called {
+		t.Error("Expected next plugin not to be called")
+	}
+}
+
+// TestServeDNS_BMC_Pattern_BugReport tests the reported bug for BMC pattern lookup
+func TestServeDNS_BMC_Pattern_BugReport(t *testing.T) {
+	p := createTestPluginForBugReport()
+	mock := &mockHandler{}
+	p.Next = mock
+
+	// Test the exact query from the bug report: bmc002.redondo.usrc
+	// This should match NID=2 with pattern bmc{03d} = bmc002
+	req := new(dns.Msg)
+	req.SetQuestion("bmc002.redondo.usrc.", dns.TypeA)
+
+	w := &mockResponseWriter{}
+
+	rcode, err := p.ServeDNS(context.Background(), w, req)
+
+	if err != nil {
+		t.Fatalf("ServeDNS failed: %v", err)
+	}
+
+	if rcode != dns.RcodeSuccess {
+		t.Errorf("Expected rcode %d (SUCCESS), got %d", dns.RcodeSuccess, rcode)
+		t.Logf("This reproduces the bug - BMC pattern lookup fails")
+	}
+
+	if len(w.msg.Answer) != 1 {
+		t.Fatalf("Expected 1 answer, got %d - this reproduces the bug", len(w.msg.Answer))
+	}
+
+	// Check A record
+	if a, ok := w.msg.Answer[0].(*dns.A); ok {
+		if !a.A.Equal(net.ParseIP("192.168.100.10")) {
+			t.Errorf("Expected IP 192.168.100.10, got %v", a.A)
+		}
+		if a.Hdr.Name != "bmc002.redondo.usrc." {
+			t.Errorf("Expected name bmc002.redondo.usrc., got %s", a.Hdr.Name)
+		}
+	} else {
+		t.Fatal("Answer is not an A record")
+	}
+
+	// Should not call next plugin
+	if mock.called {
+		t.Error("Expected next plugin not to be called")
+	}
+}
+
+// TestLookupA_BMC_XName_Direct tests BMC lookup by xname directly (unit test)
+func TestLookupA_BMC_XName_Direct(t *testing.T) {
+	p := createTestPluginForBugReport()
+
+	// Test direct lookupA call for BMC xname
+	ip := p.lookupA("x3000c0s0b1.redondo.usrc")
+	if ip == nil {
+		t.Fatal("BMC xname lookup failed - this reproduces the bug")
+	}
+
+	expected := net.ParseIP("192.168.100.10")
+	if !ip.Equal(expected) {
+		t.Errorf("Expected IP %v, got %v", expected, ip)
+	}
+}
+
+// TestLookupA_BMC_Pattern_Direct tests BMC lookup by pattern directly (unit test)
+func TestLookupA_BMC_Pattern_Direct(t *testing.T) {
+	p := createTestPluginForBugReport()
+
+	// Test direct lookupA call for BMC pattern-based hostname
+	ip := p.lookupA("bmc002.redondo.usrc")
+	if ip == nil {
+		t.Fatal("BMC pattern lookup failed - this reproduces the bug")
+	}
+
+	expected := net.ParseIP("192.168.100.10")
+	if !ip.Equal(expected) {
+		t.Errorf("Expected IP %v, got %v", expected, ip)
+	}
+}

@@ -154,7 +154,7 @@ Because the plugins integrate with SMD, also verify that your SMD instance is re
 
 ### Configuration
 
-CoreDHCP requires a config file to run. See [`resources/config.example.yaml`](resources/config.example.yaml) for an example with detailed comments on how to enable and configure **coresmd** and **bootloop**.
+CoreDHCP requires a config file to run. See [`examples/coredhcp-config.yaml`](examples/coredhcp-config.yaml) for an example with detailed comments on how to enable and configure **coresmd** and **bootloop**.
 
 ### Preparation: SMD and BSS
 

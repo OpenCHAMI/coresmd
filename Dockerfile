@@ -17,7 +17,7 @@ RUN set -ex \
     && rm /tmp/ipxe.tar.gz
 
 
-# Both coredns and coredhcp are built and addded to the same container.
+# Both coredns and coredhcp are built and added to the same container.
 # By default, coredhcp is started and coredns is not.  To start coredns, override the CMD in the 
 # container runtime configuration and provide a volume with the appropriate configuration file.
 COPY coredhcp /coredhcp

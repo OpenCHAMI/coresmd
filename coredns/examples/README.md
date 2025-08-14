@@ -5,7 +5,7 @@ This directory contains example configurations and deployment files for the Core
 ## Directory Structure
 
 ```
-examples/
+coredns/examples/
 ├── README.md                    # This file
 ├── basic/                       # Basic CoreDNS configurations
 │   └── Corefile
@@ -60,7 +60,7 @@ Enhanced configuration with:
 Deploy to Kubernetes using the provided manifests:
 
 ```bash
-kubectl apply -f examples/kubernetes/
+kubectl apply -f coredns/examples/kubernetes/
 ```
 
 ## Customization
