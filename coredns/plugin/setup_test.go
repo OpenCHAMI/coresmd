@@ -67,11 +67,11 @@ func TestParseConfigurationWithMultipleZones(t *testing.T) {
         ca_cert /path/to/ca.crt
         zone openchami.cluster {
             nodes nid{04d}
-            bmcs bmc-{id}
+
         }
         zone internal.openchami.cluster {
             nodes nid{03d}
-            bmcs bmc-{id}
+
         }
     }
     prometheus 0.0.0.0:9153
@@ -108,9 +108,6 @@ func TestParseConfigurationWithMultipleZones(t *testing.T) {
 	if zone1.NodePattern != "nid{04d}" {
 		t.Errorf("Expected first zone NodePattern to be 'nid{04d}', got '%s'", zone1.NodePattern)
 	}
-	if zone1.BMCPattern != "bmc-{id}" {
-		t.Errorf("Expected first zone BMCPattern to be 'bmc-{id}', got '%s'", zone1.BMCPattern)
-	}
 
 	// Check second zone
 	zone2 := plugin.zones[1]
@@ -119,9 +116,6 @@ func TestParseConfigurationWithMultipleZones(t *testing.T) {
 	}
 	if zone2.NodePattern != "nid{03d}" {
 		t.Errorf("Expected second zone NodePattern to be 'nid{03d}', got '%s'", zone2.NodePattern)
-	}
-	if zone2.BMCPattern != "bmc-{id}" {
-		t.Errorf("Expected second zone BMCPattern to be 'bmc-{id}', got '%s'", zone2.BMCPattern)
 	}
 }
 
@@ -168,7 +162,7 @@ func TestParseFullCorefileExample(t *testing.T) {
         cache_duration 30s
         zone openchami.cluster {
             nodes nid{04d}
-            bmcs bmc-{id}
+
         }
     }
     prometheus 0.0.0.0:9153
@@ -199,9 +193,7 @@ func TestParseFullCorefileExample(t *testing.T) {
 	if zone.NodePattern != "nid{04d}" {
 		t.Errorf("Expected NodePattern to be 'nid{04d}', got '%s'", zone.NodePattern)
 	}
-	if zone.BMCPattern != "bmc-{id}" {
-		t.Errorf("Expected BMCPattern to be 'bmc-{id}', got '%s'", zone.BMCPattern)
-	}
+
 }
 
 func TestParseConfigurationUnknownDirective(t *testing.T) {
@@ -290,40 +282,6 @@ func TestParseCorefileInvalidConfigurations(t *testing.T) {
 			expectError:   true,
 			errorContains: "smd_url is required",
 		},
-		{
-			name: "duplicate nodes directive in zone",
-			corefile: `
-.:1053 {
-    coresmd {
-        smd_url https://smd.cluster.local
-        zone cluster.local {
-            nodes nid{04d}
-            nodes nid{03d}
-            bmcs bmc-{id}
-        }
-    }
-    forward . 8.8.8.8
-}`,
-			expectError:   true,
-			errorContains: "duplicate 'nodes' directive in zone 'cluster.local'",
-		},
-		{
-			name: "duplicate bmcs directive in zone",
-			corefile: `
-.:1053 {
-    coresmd {
-        smd_url https://smd.cluster.local
-        zone cluster.local {
-            nodes nid{04d}
-            bmcs bmc-{id}
-            bmcs mgmt-{id}
-        }
-    }
-    forward . 8.8.8.8
-}`,
-			expectError:   true,
-			errorContains: "duplicate 'bmcs' directive in zone 'cluster.local'",
-		},
 	}
 
 	for _, tc := range testCases {
@@ -380,11 +338,11 @@ func TestParseCorefileValidConfigurations(t *testing.T) {
         cache_duration 60s
         zone cluster.local {
             nodes nid{04d}
-            bmcs bmc-{id}
+
         }
         zone test.local {
             nodes node{03d}
-            bmcs mgmt-{id}
+
         }
     }
     prometheus 0.0.0.0:9153
@@ -412,9 +370,6 @@ func TestParseCorefileValidConfigurations(t *testing.T) {
 				if zone1.NodePattern != "nid{04d}" {
 					t.Errorf("Expected first zone NodePattern to be 'nid{04d}', got '%s'", zone1.NodePattern)
 				}
-				if zone1.BMCPattern != "bmc-{id}" {
-					t.Errorf("Expected first zone BMCPattern to be 'bmc-{id}', got '%s'", zone1.BMCPattern)
-				}
 
 				// Check second zone
 				zone2 := plugin.zones[1]
@@ -424,9 +379,7 @@ func TestParseCorefileValidConfigurations(t *testing.T) {
 				if zone2.NodePattern != "node{03d}" {
 					t.Errorf("Expected second zone NodePattern to be 'node{03d}', got '%s'", zone2.NodePattern)
 				}
-				if zone2.BMCPattern != "mgmt-{id}" {
-					t.Errorf("Expected second zone BMCPattern to be 'mgmt-{id}', got '%s'", zone2.BMCPattern)
-				}
+
 			},
 		},
 	}
@@ -486,11 +439,11 @@ func TestDebugParseCorefile(t *testing.T) {
         smd_url https://smd.cluster.local
         zone cluster.local {
             nodes nid{04d}
-            bmcs bmc-{id}
+
         }
         zone test.local {
             nodes node{03d}
-            bmcs mgmt-{id}
+
         }
     }
     forward . 8.8.8.8

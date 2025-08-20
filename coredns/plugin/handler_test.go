@@ -163,51 +163,6 @@ func TestServeDNS_A_Record_Node(t *testing.T) {
 	}
 }
 
-func TestServeDNS_A_Record_BMC(t *testing.T) {
-	p := createTestPlugin()
-	mock := &mockHandler{}
-	p.Next = mock
-
-	// Create A record query for BMC
-	req := new(dns.Msg)
-	req.SetQuestion("bmc-bmc001.cluster.local.", dns.TypeA)
-
-	// Create mock response writer
-	w := &mockResponseWriter{}
-
-	// Call ServeDNS
-	rcode, err := p.ServeDNS(context.Background(), w, req)
-
-	if err != nil {
-		t.Fatalf("ServeDNS failed: %v", err)
-	}
-
-	if rcode != dns.RcodeSuccess {
-		t.Errorf("Expected rcode %d, got %d", dns.RcodeSuccess, rcode)
-	}
-
-	if len(w.msg.Answer) != 1 {
-		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
-	}
-
-	// Check A record
-	if a, ok := w.msg.Answer[0].(*dns.A); ok {
-		if !a.A.Equal(net.ParseIP("192.168.1.100")) {
-			t.Errorf("Expected IP 192.168.1.100, got %v", a.A)
-		}
-		if a.Hdr.Name != "bmc-bmc001.cluster.local." {
-			t.Errorf("Expected name bmc-bmc001.cluster.local., got %s", a.Hdr.Name)
-		}
-	} else {
-		t.Fatal("Answer is not an A record")
-	}
-
-	// Should not call next plugin
-	if mock.called {
-		t.Error("Expected next plugin not to be called")
-	}
-}
-
 func TestServeDNS_PTR_Record_Node(t *testing.T) {
 	p := createTestPlugin()
 	mock := &mockHandler{}
@@ -713,52 +668,6 @@ func TestServeDNS_BMC_XName_BugReport(t *testing.T) {
 	}
 }
 
-// TestServeDNS_BMC_Pattern_BugReport tests the reported bug for BMC pattern lookup
-func TestServeDNS_BMC_Pattern_BugReport(t *testing.T) {
-	p := createTestPluginForBugReport()
-	mock := &mockHandler{}
-	p.Next = mock
-
-	// Test the exact query from the bug report: bmc002.redondo.usrc
-	// This should match NID=2 with pattern bmc{03d} = bmc002
-	req := new(dns.Msg)
-	req.SetQuestion("bmc002.redondo.usrc.", dns.TypeA)
-
-	w := &mockResponseWriter{}
-
-	rcode, err := p.ServeDNS(context.Background(), w, req)
-
-	if err != nil {
-		t.Fatalf("ServeDNS failed: %v", err)
-	}
-
-	if rcode != dns.RcodeSuccess {
-		t.Errorf("Expected rcode %d (SUCCESS), got %d", dns.RcodeSuccess, rcode)
-		t.Logf("This reproduces the bug - BMC pattern lookup fails")
-	}
-
-	if len(w.msg.Answer) != 1 {
-		t.Fatalf("Expected 1 answer, got %d - this reproduces the bug", len(w.msg.Answer))
-	}
-
-	// Check A record
-	if a, ok := w.msg.Answer[0].(*dns.A); ok {
-		if !a.A.Equal(net.ParseIP("192.168.100.10")) {
-			t.Errorf("Expected IP 192.168.100.10, got %v", a.A)
-		}
-		if a.Hdr.Name != "bmc002.redondo.usrc." {
-			t.Errorf("Expected name bmc002.redondo.usrc., got %s", a.Hdr.Name)
-		}
-	} else {
-		t.Fatal("Answer is not an A record")
-	}
-
-	// Should not call next plugin
-	if mock.called {
-		t.Error("Expected next plugin not to be called")
-	}
-}
-
 // TestLookupA_BMC_XName_Direct tests BMC lookup by xname directly (unit test)
 func TestLookupA_BMC_XName_Direct(t *testing.T) {
 	p := createTestPluginForBugReport()
@@ -767,22 +676,6 @@ func TestLookupA_BMC_XName_Direct(t *testing.T) {
 	ip := p.lookupA("x3000c0s0b1.redondo.usrc")
 	if ip == nil {
 		t.Fatal("BMC xname lookup failed - this reproduces the bug")
-	}
-
-	expected := net.ParseIP("192.168.100.10")
-	if !ip.Equal(expected) {
-		t.Errorf("Expected IP %v, got %v", expected, ip)
-	}
-}
-
-// TestLookupA_BMC_Pattern_Direct tests BMC lookup by pattern directly (unit test)
-func TestLookupA_BMC_Pattern_Direct(t *testing.T) {
-	p := createTestPluginForBugReport()
-
-	// Test direct lookupA call for BMC pattern-based hostname
-	ip := p.lookupA("bmc002.redondo.usrc")
-	if ip == nil {
-		t.Fatal("BMC pattern lookup failed - this reproduces the bug")
 	}
 
 	expected := net.ParseIP("192.168.100.10")

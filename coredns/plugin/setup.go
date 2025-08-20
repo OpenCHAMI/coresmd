@@ -30,11 +30,9 @@ type Plugin struct {
 	smdClient *coresmd.SmdClient
 }
 
-// Global variables for shared cache across plugin instances
+// Global variables
 var (
-	sharedCache     *coresmd.Cache
-	sharedSmdClient *coresmd.SmdClient
-	log             = logrus.NewEntry(logrus.New())
+	log = logrus.NewEntry(logrus.New())
 )
 
 func init() {
@@ -128,7 +126,6 @@ func parse(c *caddy.Controller) (*Plugin, error) {
 				// Example usage in Corefile:
 				//   zone cluster.local {
 				//       nodes nid{04d}
-				//       bmcs bmc-{id}
 				//   }
 				//
 				if !c.NextArg() {
@@ -166,7 +163,6 @@ func parseZone(c *caddy.Controller, zoneName string) (Zone, error) {
 
 	// Track whether directives have already been seen to prevent duplicates
 	seenNodes := false
-	seenBMCs := false
 
 	// Enter the block for the zone directive (consume the opening brace if present)
 	if !c.Next() {
@@ -193,15 +189,6 @@ func parseZone(c *caddy.Controller, zoneName string) (Zone, error) {
 			}
 			zone.NodePattern = c.Val()
 			seenNodes = true
-		case "bmcs":
-			if seenBMCs {
-				return zone, c.Errf("duplicate 'bmcs' directive in zone '%s'", zoneName)
-			}
-			if !c.NextArg() {
-				return zone, c.ArgErr()
-			}
-			zone.BMCPattern = c.Val()
-			seenBMCs = true
 		default:
 			return zone, c.Errf("unknown zone directive '%s'", directive)
 		}
@@ -218,17 +205,17 @@ func (p *Plugin) OnStartup() error {
 	log.WithFields(version.VersionInfo).Debugln("detailed version info")
 
 	// Initialize shared cache if not already done
-	if sharedCache == nil {
+	if p.cache == nil {
 		baseURL, err := url.Parse(p.smdURL)
 		if err != nil {
 			return fmt.Errorf("failed to parse SMD URL: %w", err)
 		}
 
-		sharedSmdClient = coresmd.NewSmdClient(baseURL)
+		p.smdClient = coresmd.NewSmdClient(baseURL)
 
 		// Set up CA certificate if provided
 		if p.caCert != "" {
-			if err := sharedSmdClient.UseCACert(p.caCert); err != nil {
+			if err := p.smdClient.UseCACert(p.caCert); err != nil {
 				return fmt.Errorf("failed to set CA certificate: %w", err)
 			}
 			log.Infof("set CA certificate for SMD to the contents of %s", p.caCert)
@@ -237,21 +224,17 @@ func (p *Plugin) OnStartup() error {
 		}
 
 		// Create cache
-		sharedCache, err = coresmd.NewCache(p.cacheDuration, sharedSmdClient)
+		p.cache, err = coresmd.NewCache(p.cacheDuration, p.smdClient)
 		if err != nil {
 			return fmt.Errorf("failed to create cache: %w", err)
 		}
 
 		// Start cache refresh loop
-		sharedCache.RefreshLoop()
+		p.cache.RefreshLoop()
 
 		log.Infof("coresmd cache initialized with base URL %s and validity duration %s",
-			sharedSmdClient.BaseURL, sharedCache.Duration.String())
+			p.smdClient.BaseURL, p.cache.Duration.String())
 	}
-
-	// Assign shared resources to this plugin instance
-	p.cache = sharedCache
-	p.smdClient = sharedSmdClient
 
 	// Set default zones if none configured
 	if len(p.zones) == 0 {

@@ -133,19 +133,12 @@ func (p *Plugin) lookupA(name string) net.IP {
 				}
 			}
 		}
-		// BMC pattern: e.g., bmc-xname.cluster.local
 		if strings.HasSuffix(name, zone.Name) {
 			for _, ei := range p.cache.EthernetInterfaces {
 				if comp, ok := p.cache.Components[ei.ComponentID]; ok && comp.Type == "NodeBMC" {
 					xnameHost := comp.ID
 					xnameFQDN := xnameHost + "." + zone.Name
-					hostFQDN := ""
-					// Expand BMC pattern
-					if zone.BMCPattern != "" {
-						host := expandPattern(zone.BMCPattern, comp.NID, comp.ID)
-						hostFQDN = host + "." + zone.Name
-					}
-					if name == hostFQDN || name == xnameFQDN {
+					if name == xnameFQDN {
 						if len(ei.IPAddresses) > 0 {
 							return net.ParseIP(ei.IPAddresses[0].IPAddress)
 						}

@@ -42,11 +42,9 @@ The CoreSMD CoreDNS plugin is included in the CoreSMD binary. No additional inst
         cache_duration 30s
         zone cluster.local {
             nodes nid{04d}
-            bmcs bmc-{id}
         }
         zone test.local {
             nodes node{04d}
-            bmcs mgmt-{id}
         }
     }
     prometheus 0.0.0.0:9153
@@ -70,7 +68,6 @@ Each zone block supports the following options:
 | Option | Type | Description |
 |--------|------|-------------|
 | `nodes` | string | Node hostname pattern (e.g., "nid{04d}") |
-| `bmcs` | string | BMC hostname pattern (e.g., "bmc-{id}") |
 
 ## DNS Record Types
 
@@ -156,11 +153,9 @@ The plugin implements readiness reporting:
         cache_duration 60s
         zone cluster.local {
             nodes nid{04d}
-            bmcs bmc-{id}
         }
         zone mgmt.local {
             nodes mgmt{04d}
-            bmcs ipmi-{id}
         }
     }
     prometheus 0.0.0.0:9153
