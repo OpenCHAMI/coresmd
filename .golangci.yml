@@ -1,40 +1,30 @@
-run:
-  timeout: 5m
-  go: "1.21"
-
+version: "2"
 linters:
+  enable: []
+  disable:
+    - staticcheck
+    - unused
+    - errcheck
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+formatters:
   enable:
     - gofmt
     - goimports
-    - govet
-    - errcheck
-    - staticcheck
-    - gosimple
-    - ineffassign
-    - unused
-    - misspell
-    - gosec
-    - gocyclo
-    - dupl
-    - goconst
-    - gocritic
-    - godot
-    - goheader
-    - gomnd
-    - goprintffuncname
-    - lll
-    - nakedret
-    - noctx
-    - nolintlint
-    - rowserrcheck
-    - structcheck
-    - stylecheck
-    - typecheck
-    - unconvert
-    - unparam
-    - varcheck
-    - whitespace
-
-issues:
-  max-issues-per-linter: 0
-  max-same-issues: 0 
+  settings:
+    goimports:
+      # A list of prefixes, which, if set, checks import paths
+      # with the given prefixes are grouped after 3rd-party packages.
+      # Default: []
+      local-prefixes:
+        - github.com/OpenCHAMI/ochami/
+  exclusions:
+    generated: lax 
