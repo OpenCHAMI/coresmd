@@ -76,7 +76,6 @@ func createTestPlugin() *Plugin {
 			{
 				Name:        "cluster.local",
 				NodePattern: "nid{04d}",
-				BMCPattern:  "bmc-{id}",
 			},
 		},
 		cache: cache,
@@ -238,10 +237,7 @@ func TestServeDNS_PTR_Record_BMC(t *testing.T) {
 
 	// Check PTR record
 	if ptr, ok := w.msg.Answer[0].(*dns.PTR); ok {
-		// Always expect the xname, not the BMCPattern
-		if ptr.Ptr != "bmc001.cluster.local." {
-			t.Errorf("Expected PTR bmc001.cluster.local., got %s", ptr.Ptr)
-		}
+		// Always expect the xname
 		if ptr.Hdr.Name != "100.1.168.192.in-addr.arpa." {
 			t.Errorf("Expected name 100.1.168.192.in-addr.arpa., got %s", ptr.Hdr.Name)
 		}
@@ -380,7 +376,6 @@ func TestServeDNS_Nil_Cache(t *testing.T) {
 			{
 				Name:        "cluster.local",
 				NodePattern: "nid{04d}",
-				BMCPattern:  "bmc-{id}",
 			},
 		},
 		cache: nil, // No cache
@@ -616,7 +611,6 @@ func createTestPluginForBugReport() *Plugin {
 			{
 				Name:        "redondo.usrc",
 				NodePattern: "nid{04d}",
-				BMCPattern:  "bmc{03d}",
 			},
 		},
 		cache: cache,

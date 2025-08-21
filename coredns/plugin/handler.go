@@ -171,8 +171,7 @@ func (p *Plugin) lookupPTR(name string) string {
 								// host := strings.Replace(zone.NodePattern, "{04d}", fmt.Sprintf("%04d", comp.NID), 1)
 								return comp.ID + "." + zone.Name
 							}
-							if comp.Type == "NodeBMC" && zone.BMCPattern != "" {
-								// host := strings.Replace(zone.BMCPattern, "{id}", comp.ID, 1)
+							if comp.Type == "NodeBMC" {
 								return comp.ID + "." + zone.Name
 							}
 						}

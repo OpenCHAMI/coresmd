@@ -234,7 +234,6 @@ func TestPluginOnStartup(t *testing.T) {
 			{
 				Name:        "cluster.local",
 				NodePattern: "nid{04d}",
-				BMCPattern:  "bmc-{id}",
 			},
 		},
 	}

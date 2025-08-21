@@ -6,7 +6,6 @@ import "strings"
 type Zone struct {
 	Name        string // Zone name (e.g., "cluster.local")
 	NodePattern string // Pattern for node records (e.g., "nid{04d}.cluster.local")
-	BMCPattern  string // Pattern for BMC records (e.g., "bmc-{id}.cluster.local")
 }
 
 // ZoneManager handles zone operations and record lookups

@@ -242,7 +242,6 @@ func (p *Plugin) OnStartup() error {
 			{
 				Name:        "cluster.local",
 				NodePattern: "nid{04d}",
-				BMCPattern:  "bmc-{id}",
 			},
 		}
 	} else {
