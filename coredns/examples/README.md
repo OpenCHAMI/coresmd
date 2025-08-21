@@ -85,7 +85,6 @@ coresmd {
     smd_url https://smd.cluster.local
     zone custom.local {
         nodes node{04d}
-        bmcs mgmt-{id}
     }
 }
 ```
