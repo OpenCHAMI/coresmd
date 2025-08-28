@@ -19,7 +19,6 @@
         zone openchami.cluster {
             # Pattern for node hostnames: nid0001, nid0002, etc.
             nodes nid{04d}
-            # Pattern for BMC hostnames: bmc-001, bmc-002, etc.
         }
     }
     

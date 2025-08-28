@@ -77,7 +77,7 @@ Forward DNS resolution for nodes and BMCs:
 
 ```
 nid0001.cluster.local.    IN A    192.168.1.10
-bmc-bmc001.cluster.local. IN A    192.168.1.100
+x3000c1s1b1.cluster.local. IN A    192.168.1.100
 ```
 
 ### PTR Records
@@ -86,7 +86,7 @@ Reverse DNS resolution:
 
 ```
 10.1.168.192.in-addr.arpa. IN PTR nid0001.cluster.local.
-100.1.168.192.in-addr.arpa. IN PTR bmc-bmc001.cluster.local.
+100.1.168.192.in-addr.arpa. IN PTR x3000c1s1b1.cluster.local.
 ```
 
 ### TXT Records
