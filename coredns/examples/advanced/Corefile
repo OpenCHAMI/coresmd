@@ -1,0 +1,43 @@
+# Advanced CoreSMD CoreDNS Configuration
+# This configuration provides DNS resolution with custom zones and TLS support
+# 
+# This example demonstrates advanced features including:
+# - TLS certificate validation for secure SMD communication
+# - Multiple zone configurations for different domains
+# - Custom hostname patterns for different component types
+# - Extended cache duration for production environments
+
+# Main DNS server block - listens on default port 53
+. {
+    # CoreSMD plugin configuration with advanced features
+    coresmd {
+        # URL of the SMD server that provides component information
+        smd_url https://smd.cluster.local
+        
+        # CA certificate for validating SMD server TLS certificate
+        # Required for secure communication in production environments
+        ca_cert /etc/ssl/certs/smd-ca.crt
+        
+        # Extended cache duration for production (60 seconds)
+        # Longer cache reduces SMD server load but may delay updates
+        cache_duration 60s
+        
+        # Primary zone configuration for cluster.local domain
+        zone cluster.local {
+            # Pattern for compute node hostnames: nid0001, nid0002, etc.
+            nodes nid{04d}
+        }
+        
+        # Secondary zone configuration for management network
+        zone mgmt.local {
+            # Pattern for management node hostnames: mgmt0001, mgmt0002, etc.
+            nodes mgmt{04d}
+        }
+    }
+    
+    # Prometheus metrics endpoint for monitoring and alerting
+    prometheus 0.0.0.0:9153
+    
+    # Forward all other queries to Google's DNS servers
+    forward . 8.8.8.8
+} 

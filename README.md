@@ -103,7 +103,7 @@ docker build . --tag ghcr.io/openchami/coresmd:latest
    ```
 2. Clone CoreSMD (this is **not strictly** required for building, but **is** needed if you want the plugin version included):
    ```bash
-   git clone https://github.com/OpenCHAMI/coresmd
+   git clone https://github.com/openchami/coresmd
    cd coresmd
    ./gen_version.bash
    cd ..
@@ -121,8 +121,8 @@ docker build . --tag ghcr.io/openchami/coresmd:latest
      -f core-plugins.txt \
      -t coredhcp.go.template \
      -o ../../../build/coredhcp.go \
-     github.com/OpenCHAMI/coresmd/coresmd \
-     github.com/OpenCHAMI/coresmd/bootloop
+     github.com/openchami/coresmd/coresmd \
+     github.com/openchami/coresmd/bootloop
    ```
 5. Initialize the build directory as a Go module and build CoreDHCP:
    ```bash
@@ -130,7 +130,7 @@ docker build . --tag ghcr.io/openchami/coresmd:latest
    go mod init coredhcp
    go mod edit -go=1.21
    go mod edit -replace=github.com/coredhcp/coredhcp=../coredhcp
-   go mod edit -replace=github.com/OpenCHAMI/coresmd=../coresmd
+   go mod edit -replace=github.com/openchami/coresmd=../coresmd
    go mod tidy
    go build
    ```
@@ -154,7 +154,7 @@ Because the plugins integrate with SMD, also verify that your SMD instance is re
 
 ### Configuration
 
-CoreDHCP requires a config file to run. See [`resources/config.example.yaml`](resources/config.example.yaml) for an example with detailed comments on how to enable and configure **coresmd** and **bootloop**.
+CoreDHCP requires a config file to run. See [`examples/coredhcp-config.yaml`](examples/coredhcp-config.yaml) for an example with detailed comments on how to enable and configure **coresmd** and **bootloop**.
 
 ### Preparation: SMD and BSS
 
@@ -174,7 +174,7 @@ Once all prerequisites are set, you can run CoreDHCP:
   docker run --rm \
     --net=host \
     -v /path/to/config.yaml:/etc/coredhcp/config.yaml:ro \
-    ghcr.io/OpenCHAMI/coresmd:latest
+    ghcr.io/openchami/coresmd:latest
   ```
 
 - **Bare Metal**  
