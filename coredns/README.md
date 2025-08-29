@@ -4,10 +4,9 @@ The CoreSMD CoreDNS plugin provides dynamic DNS resolution for OpenCHAMI cluster
 
 ## Features
 
-- **Dynamic DNS Records**: Automatic A, PTR, CNAME, and TXT record generation
+- **Dynamic DNS Records**: Automatic A, PTR, and CNAME record generation
 - **SMD Integration**: Real-time data from State Management Database
 - **Multiple Record Types**: Support for forward and reverse DNS lookups
-- **Component Metadata**: Rich TXT records with component information
 - **Prometheus Metrics**: Built-in monitoring and metrics collection
 - **Readiness Reporting**: Health checks and readiness endpoints
 - **Cache Integration**: Shared cache with CoreDHCP plugins
@@ -87,15 +86,6 @@ Reverse DNS resolution:
 ```
 10.1.168.192.in-addr.arpa. IN PTR nid0001.cluster.local.
 100.1.168.192.in-addr.arpa. IN PTR x3000c1s1b1.cluster.local.
-```
-
-### TXT Records
-
-Component metadata:
-
-```
-nid0001.cluster.local. IN TXT "type=Node" "nid=1" "component_id=node001" "mac=00:11:22:33:44:55"
-bmc-bmc001.cluster.local. IN TXT "type=NodeBMC" "component_id=bmc001" "mac=aa:bb:cc:dd:ee:ff"
 ```
 
 ### CNAME Records
