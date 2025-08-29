@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openchami/coresmd/coresmd"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/openchami/coresmd/coresmd"
 )
 
 func TestMetricsRegistration(t *testing.T) {
