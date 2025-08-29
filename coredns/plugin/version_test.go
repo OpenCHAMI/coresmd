@@ -3,7 +3,7 @@ package plugin
 import (
 	"testing"
 
-	"github.com/OpenCHAMI/coresmd/internal/version"
+	"github.com/openchami/coresmd/internal/version"
 )
 
 func TestVersionIntegration(t *testing.T) {

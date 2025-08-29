@@ -1,4 +1,4 @@
-module github.com/OpenCHAMI/coresmd
+module github.com/openchami/coresmd
 
 go 1.23.0
 

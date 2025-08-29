@@ -4,7 +4,7 @@ project_name: coresmd
 before:
   hooks:
   - go install github.com/coredhcp/coredhcp/cmds/coredhcp-generator@latest
-  - coredhcp-generator -t generator/coredhcp.go.template -f generator/plugins.txt github.com/OpenCHAMI/coresmd/coresmd github.com/OpenCHAMI/coresmd/bootloop -o coredhcp/coredhcp.go
+  - coredhcp-generator -t generator/coredhcp.go.template -f generator/plugins.txt github.com/openchami/coresmd/coresmd github.com/openchami/coresmd/bootloop -o coredhcp/coredhcp.go
   - go mod tidy
 
 builds:
@@ -26,15 +26,15 @@ builds:
     # export BUILD_USER=$(whoami)
     ldflags:
       - "-s -w \
-         -X github.com/OpenCHAMI/coresmd/internal/version.GitCommit={{ .Commit }} \
-         -X github.com/OpenCHAMI/coresmd/internal/version.BuildTime={{ .Date }} \
-         -X github.com/OpenCHAMI/coresmd/internal/version.Version={{ .Version }} \
-         -X github.com/OpenCHAMI/coresmd/internal/version.GitBranch={{ .Branch }} \
-         -X github.com/OpenCHAMI/coresmd/internal/version.GitTag={{ .Tag }} \
-         -X github.com/OpenCHAMI/coresmd/internal/version.GitState={{ .GitTreeState }} \
-         -X github.com/OpenCHAMI/coresmd/internal/version.BuildHost={{ .Env.BUILD_HOST }} \
-         -X github.com/OpenCHAMI/coresmd/internal/version.GoVersion={{ .Env.GO_VERSION }} \
-         -X github.com/OpenCHAMI/coresmd/internal/version.BuildUser={{ .Env.BUILD_USER }} "
+         -X github.com/openchami/coresmd/internal/version.GitCommit={{ .Commit }} \
+         -X github.com/openchami/coresmd/internal/version.BuildTime={{ .Date }} \
+         -X github.com/openchami/coresmd/internal/version.Version={{ .Version }} \
+         -X github.com/openchami/coresmd/internal/version.GitBranch={{ .Branch }} \
+         -X github.com/openchami/coresmd/internal/version.GitTag={{ .Tag }} \
+         -X github.com/openchami/coresmd/internal/version.GitState={{ .GitTreeState }} \
+         -X github.com/openchami/coresmd/internal/version.BuildHost={{ .Env.BUILD_HOST }} \
+         -X github.com/openchami/coresmd/internal/version.GoVersion={{ .Env.GO_VERSION }} \
+         -X github.com/openchami/coresmd/internal/version.BuildUser={{ .Env.BUILD_USER }} "
     binary: coredhcp
     env:
       # The bootloop plugin uses sqlite3 which requires CGO.
@@ -58,15 +58,15 @@ builds:
 
     ldflags:
       - "-s -w \
-         -X github.com/OpenCHAMI/coresmd/internal/version.GitCommit={{ .Commit }} \
-         -X github.com/OpenCHAMI/coresmd/internal/version.BuildTime={{ .Date }} \
-         -X github.com/OpenCHAMI/coresmd/internal/version.Version={{ .Version }} \
-         -X github.com/OpenCHAMI/coresmd/internal/version.GitBranch={{ .Branch }} \
-         -X github.com/OpenCHAMI/coresmd/internal/version.GitTag={{ .Tag }} \
-         -X github.com/OpenCHAMI/coresmd/internal/version.GitState={{ .GitTreeState }} \
-         -X github.com/OpenCHAMI/coresmd/internal/version.BuildHost={{ .Env.BUILD_HOST }} \
-         -X github.com/OpenCHAMI/coresmd/internal/version.GoVersion={{ .Env.GO_VERSION }} \
-         -X github.com/OpenCHAMI/coresmd/internal/version.BuildUser={{ .Env.BUILD_USER }} "
+         -X github.com/openchami/coresmd/internal/version.GitCommit={{ .Commit }} \
+         -X github.com/openchami/coresmd/internal/version.BuildTime={{ .Date }} \
+         -X github.com/openchami/coresmd/internal/version.Version={{ .Version }} \
+         -X github.com/openchami/coresmd/internal/version.GitBranch={{ .Branch }} \
+         -X github.com/openchami/coresmd/internal/version.GitTag={{ .Tag }} \
+         -X github.com/openchami/coresmd/internal/version.GitState={{ .GitTreeState }} \
+         -X github.com/openchami/coresmd/internal/version.BuildHost={{ .Env.BUILD_HOST }} \
+         -X github.com/openchami/coresmd/internal/version.GoVersion={{ .Env.GO_VERSION }} \
+         -X github.com/openchami/coresmd/internal/version.BuildUser={{ .Env.BUILD_USER }} "
     binary: coredns
     env:
       - CGO_ENABLED=1

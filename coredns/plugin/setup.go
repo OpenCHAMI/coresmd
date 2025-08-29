@@ -5,11 +5,11 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/OpenCHAMI/coresmd/coresmd"
-	"github.com/OpenCHAMI/coresmd/internal/version"
 	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
+	"github.com/openchami/coresmd/coresmd"
+	"github.com/openchami/coresmd/internal/version"
 	"github.com/sirupsen/logrus"
 )
 

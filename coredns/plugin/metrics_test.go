@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OpenCHAMI/coresmd/coresmd"
+	"github.com/openchami/coresmd/coresmd"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

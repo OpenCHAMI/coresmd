@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OpenCHAMI/coresmd/coresmd"
 	"github.com/coredns/coredns/plugin"
 	"github.com/miekg/dns"
+	"github.com/openchami/coresmd/coresmd"
 )
 
 // Mock plugin handler for testing
