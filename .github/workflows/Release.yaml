@@ -78,6 +78,6 @@ jobs:
       - name: generate build provenance of docker container
         uses: actions/attest-build-provenance@v1
         with:
-          subject-name: ghcr.io/openchami/coredhcp
+          subject-name: ghcr.io/openchami/coresmd
           subject-digest: ${{ steps.process_goreleaser_output.outputs.digest }}
           push-to-registry: true
