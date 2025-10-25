@@ -21,6 +21,7 @@ import (
 	_ "github.com/coredns/coredns/plugin/root"
 	_ "github.com/coredns/coredns/plugin/template"
 	_ "github.com/coredns/coredns/plugin/whoami"
+	_ "github.com/ori-edge/k8s_gateway"
 
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/coremain"
@@ -36,6 +37,7 @@ var directives = []string{
 	"prometheus",
 	// Your plugin
 	"coresmd",
+	"k8s_gateway",
 	// Standard plugins (add/remove as needed)
 	"forward",
 	"cache",
