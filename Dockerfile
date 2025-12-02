@@ -1,4 +1,4 @@
-FROM chainguard/wolfi-base:latest
+FROM docker.io/chainguard/wolfi-base:latest
 
 
 # Include curl and tini in the final image.
