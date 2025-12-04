@@ -27,26 +27,49 @@ type IfaceInfo struct {
 	IPList  []net.IP
 }
 
-var log = logger.GetLogger("plugins/coresmd")
+type Config struct {
+	// Parsed from configuration file
+	svcBaseURI  *url.URL       // svc_base_uri
+	ipxeBaseURI *url.URL       // ipxe_base_uri
+	caCert      string         // ca_cert
+	cacheValid  *time.Duration // cache_valid
+	leaseTime   *time.Duration // lease_time
+	singlePort  bool           // single_port
+	tftpDir     string         // tftp_dir
+	tftpPort    int            // tftp_port
+}
+
+func (c Config) String() string {
+	return fmt.Sprintf("svc_base_uri=%s ipxe_base_uri=%s ca_cert=%s cache_valid=%s lease_time=%s single_port=%v tftp_dir=%s tftp_port=%d",
+		c.svcBaseURI,
+		c.ipxeBaseURI,
+		c.caCert,
+		c.cacheValid,
+		c.leaseTime,
+		c.singlePort,
+		c.tftpDir,
+		c.tftpPort,
+	)
+}
+
+const (
+	defaultTFTPDirectory = "/tftpboot"
+	defaultTFTPPort      = 69
+	defaultCacheValid    = "30s"
+	defaultLeaseTime     = "1h0m0s"
+)
+
+var (
+	cache        *Cache
+	globalConfig Config
+	log          = logger.GetLogger("plugins/coresmd")
+)
 
 var Plugin = plugins.Plugin{
 	Name:   "coresmd",
 	Setup6: setup6,
 	Setup4: setup4,
 }
-
-var (
-	cache             *Cache
-	baseURL           *url.URL
-	bootScriptBaseURL *url.URL
-	leaseDuration     time.Duration
-	singlePort        bool
-)
-
-const (
-	defaultTFTPDirectory = "/tftpboot"
-	defaultTFTPPort      = 69
-)
 
 func logVersion() {
 	log.Infof("initializing coresmd/coresmd %s (%s), built %s", version.Version, version.GitState, version.BuildTime)
@@ -60,76 +83,181 @@ func setup6(args ...string) (handler.Handler6, error) {
 func setup4(args ...string) (handler.Handler4, error) {
 	logVersion()
 
-	// Ensure all required args were passed
-	if len(args) != 6 {
-		return nil, errors.New("expected 6 arguments: base URL, boot script base URL, CA certificate path, cache duration, lease duration, single port mode")
+	// Parse config from config file
+	cfg, errs := parseConfig(args...)
+	for _, err := range errs {
+		log.Error(err)
 	}
 
-	// Create new SmdClient using first argument (base URL)
-	log.Debug("generating new SmdClient")
-	var err error
-	baseURL, err = url.Parse(args[0])
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse base URL: %w", err)
+	// Validate parsed config
+	warns, errs := cfg.validate()
+	for _, warning := range warns {
+		log.Warn(warning)
 	}
-	smdClient := NewSmdClient(baseURL)
-
-	// Parse from the second argument the insecure URL used by iPXE clients
-	// to fetch their boot script via HTTP without a certificate
-	log.Debug("parsing boot script base URL")
-	bootScriptBaseURL, err = url.Parse(args[1])
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse boot script base URL: %w", err)
-	}
-
-	// If nonempty, test that CA cert path exists (third argument)
-	caCertPath := strings.Trim(args[2], `"'`)
-	log.Infof("cacertPath: %s", caCertPath)
-	if caCertPath != "" {
-		if err := smdClient.UseCACert(caCertPath); err != nil {
-			return nil, fmt.Errorf("failed to set CA certificate: %w", err)
+	if len(errs) > 0 {
+		for _, err := range errs {
+			log.Error(err)
 		}
-		log.Infof("set CA certificate for SMD to the contents of %s", caCertPath)
-	} else {
-		log.Infof("CA certificate path was empty, not setting")
+		return nil, fmt.Errorf("%d fatal errors occurred, exiting", len(errs))
 	}
 
-	// Create new Cache using fourth argument (cache validity duration) and new SmdClient
-	// pointer
-	log.Debug("generating new Cache")
-	cache, err = NewCache(args[3], smdClient)
-	if err != nil {
+	// Set parsed config as global to be accessed by other functions
+	globalConfig = cfg
+
+	// Create client to talk to SMD and set validating CA cert
+	smdClient := NewSmdClient(cfg.svcBaseURI)
+	if err := smdClient.UseCACert(cfg.caCert); err != nil {
+		return nil, fmt.Errorf("failed to set CA certificate: %w", err)
+	}
+
+	// Create cache and start fetching
+	var err error
+	if cache, err = NewCache(cfg.cacheValid.String(), smdClient); err != nil {
 		return nil, fmt.Errorf("failed to create new cache: %w", err)
 	}
-
-	// Set lease duration from fifth argument
-	log.Debug("setting lease duration")
-	leaseDuration, err = time.ParseDuration(args[4])
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse lease duration: %w", err)
-	}
-
-	log.Debug("determining port mode")
-	singlePort, err = strconv.ParseBool(args[5])
-	if err != nil {
-		return nil, fmt.Errorf("invalid single port toggle '%s', use 'true' or 'false'", args[5])
-	}
-
 	cache.RefreshLoop()
 
-	// Start tftpserver
-	log.Infof("starting TFTP server on port %d with directory %s", defaultTFTPPort, defaultTFTPDirectory)
+	// Start tftp server
+	log.Infof("starting TFTP server on port %d with directory %s", cfg.tftpPort, cfg.tftpDir)
 	server := &tftpServer{
-		directory:  defaultTFTPDirectory,
-		port:       defaultTFTPPort,
-		singlePort: singlePort,
+		directory:  cfg.tftpDir,
+		port:       cfg.tftpPort,
+		singlePort: cfg.singlePort,
 	}
 
 	go server.Start()
 
-	log.Infof("coresmd plugin initialized with base URL %s and validity duration %s", smdClient.BaseURL, cache.Duration.String())
+	log.Infof("coresmd plugin initialized with %s", cfg)
 
 	return Handler4, nil
+}
+
+// parseConfig takes a variadic array of string arguments representing an array
+// of key=value pairs and parses them into a Config struct, returning it. If any
+// errors occur, they are gathered into errs, a slice of errors, so that they
+// can be printed or handled.
+func parseConfig(argv ...string) (cfg Config, errs []error) {
+	for idx, arg := range argv {
+		opt := strings.SplitN(arg, "=", 2)
+
+		// Ensure key=val format
+		if len(opt) != 2 {
+			errs = append(errs, fmt.Errorf("arg %d: invalid format '%s', should be 'key=val' (skipping)", idx, arg))
+			continue
+		}
+
+		// Check that key is known and, if so, process value
+		switch opt[0] {
+		case "svc_base_uri":
+			if svcURI, err := url.Parse(opt[1]); err != nil {
+				errs = append(errs, fmt.Errorf("arg %d: %s: invalid URI '%s' (skipping): %w", idx, opt[0], opt[1], err))
+				continue
+			} else {
+				cfg.svcBaseURI = svcURI
+			}
+		case "ipxe_base_uri":
+			if ipxeURI, err := url.Parse(opt[1]); err != nil {
+				errs = append(errs, fmt.Errorf("arg %d: %s: invalid URI '%s' (skipping): %w", idx, opt[0], opt[1], err))
+				continue
+			} else {
+				cfg.ipxeBaseURI = ipxeURI
+			}
+		case "ca_cert":
+			// Simply set if nonempty when trimmed. Checking happens later.
+			caCertPath := strings.Trim(opt[1], `"'`)
+			if caCertPath != "" {
+				cfg.caCert = caCertPath
+			}
+		case "cache_valid":
+			if cacheValid, err := time.ParseDuration(opt[1]); err != nil {
+				errs = append(errs, fmt.Errorf("arg %d: %s: invalid duration '%s' (skipping): %w", idx, opt[0], opt[1], err))
+				continue
+			} else {
+				cfg.cacheValid = &cacheValid
+			}
+		case "lease_time":
+			if leaseTime, err := time.ParseDuration(opt[1]); err != nil {
+				errs = append(errs, fmt.Errorf("arg %d: %s: invalid duration '%s' (skipping): %w", idx, opt[0], opt[1], err))
+				continue
+			} else {
+				cfg.leaseTime = &leaseTime
+			}
+		case "single_port":
+			if singlePort, err := strconv.ParseBool(opt[1]); err != nil {
+				errs = append(errs, fmt.Errorf("arg %d: %s: invalid value '%s' (defaulting to false): %w", idx, opt[0], opt[1], err))
+				continue
+			} else {
+				cfg.singlePort = singlePort
+			}
+		case "tftp_dir":
+			tftpDir := strings.Trim(opt[1], `'"`)
+			if tftpDir != "" {
+				cfg.tftpDir = tftpDir
+			}
+		case "tftp_port":
+			if tftpPort, err := strconv.ParseInt(opt[1], 10, 64); err != nil {
+				errs = append(errs, fmt.Errorf("arg %d: %s: invalid port '%s' (defaulting to %d): %w", idx, opt[0], opt[1], defaultTFTPPort, err))
+				cfg.tftpPort = defaultTFTPPort
+			} else {
+				if tftpPort >= 0 && tftpPort <= 65535 {
+					cfg.tftpPort = int(tftpPort)
+				} else {
+					errs = append(errs, fmt.Errorf("arg %d: %s: port '%d' out of range, must be between 0-65535 (defaulting to %d)", idx, opt[0], tftpPort, defaultTFTPPort))
+					cfg.tftpPort = defaultTFTPPort
+				}
+			}
+		default:
+			errs = append(errs, fmt.Errorf("arg %d: unknown config key '%s' (skipping)", idx, opt[0]))
+			continue
+		}
+	}
+	return
+}
+
+// validate validates a Config, putting warnings in warns (a []string) and fatal
+// errors in errs (a []error) so that they can be printed and handled. For
+// members of Config that support default values, default values will be set for
+// them if invalid values are detected.
+func (c *Config) validate() (warns []string, errs []error) {
+	if c.svcBaseURI == nil {
+		errs = append(errs, fmt.Errorf("svc_base_uri is required"))
+	}
+	if c.ipxeBaseURI == nil {
+		errs = append(errs, fmt.Errorf("ipxe_base_uri is required"))
+	}
+	if c.caCert == "" {
+		warns = append(warns, "ca_cert unset, TLS certificates will not be validated")
+	}
+	if c.cacheValid == nil {
+		warns = append(warns, fmt.Sprintf("cache_valid unset, defaulting to %s", defaultCacheValid))
+		duration, err := time.ParseDuration(defaultCacheValid)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("unexpected error trying to set default cache_valid: %w", err))
+		} else {
+			c.cacheValid = &duration
+		}
+	}
+	if c.leaseTime == nil {
+		warns = append(warns, fmt.Sprintf("lease_time unset, defaulting to %s", defaultLeaseTime))
+		duration, err := time.ParseDuration(defaultLeaseTime)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("unexpected error trying to set default lease_time: %w", err))
+		} else {
+			c.leaseTime = &duration
+		}
+	}
+	if c.tftpPort < 0 || c.tftpPort > 65535 {
+		warns = append(warns, fmt.Sprintf("tftp_port %d out of 0-65535 range, defaulting to %d", c.tftpPort, defaultTFTPPort))
+		c.tftpPort = defaultTFTPPort
+	} else if c.tftpPort == 0 {
+		warns = append(warns, fmt.Sprintf("tftp_port unset (0), defaulting to %d", defaultTFTPPort))
+		c.tftpPort = defaultTFTPPort
+	}
+	if c.tftpDir == "" {
+		warns = append(warns, fmt.Sprintf("tftp_dir unset, defaulting to %s", defaultTFTPDirectory))
+		c.tftpDir = defaultTFTPDirectory
+	}
+	return
 }
 
 func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
@@ -151,8 +279,12 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	resp.YourIPAddr = assignedIP
 
 	// Set lease time
-	resp.Options.Update(dhcpv4.OptIPAddressLeaseTime(leaseDuration))
-	log.Infof("assigning %s to %s (%s) with a lease duration of %s", assignedIP, ifaceInfo.MAC, ifaceInfo.Type, leaseDuration)
+	if globalConfig.leaseTime == nil {
+		log.Errorf("lease time unset in global config! unable to set lease time in DHCPv4 response to %s", ifaceInfo.MAC)
+	} else {
+		resp.Options.Update(dhcpv4.OptIPAddressLeaseTime(*globalConfig.leaseTime))
+	}
+	log.Infof("assigning %s to %s (%s) with a lease duration of %s", assignedIP, ifaceInfo.MAC, ifaceInfo.Type, globalConfig.leaseTime)
 
 	// Set client hostname
 	if ifaceInfo.Type == "Node" {
@@ -168,7 +300,7 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 		resp, _ = ipxe.ServeIPXEBootloader(log, req, resp)
 	} else {
 		// BOOT STAGE 2: Send URL to BSS boot script
-		bssURL := bootScriptBaseURL.JoinPath("/boot/v1/bootscript")
+		bssURL := globalConfig.ipxeBaseURI.JoinPath("/boot/v1/bootscript")
 		bssURL.RawQuery = fmt.Sprintf("mac=%s", hwAddr)
 		resp.Options.Update(dhcpv4.OptBootFileName(bssURL.String()))
 	}
