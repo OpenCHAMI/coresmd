@@ -36,20 +36,17 @@ server4:
     # this.
     #
     # ARGUMENTS:
-    #   1. Base URL used to communicate with SMD.
-    #   2. Base URL used to retrieve boot scripts. This is usually an HTTP URL
-    #      that BSS is listening on, since the iPXE bootloader doesn't have the
-    #      OpenCHAMI CA certificate to do proper TLS. It may also be an IP
-    #      address if name servers are not configured.
-    #   3. (OPTIONAL) Path to CA cert used for TLS with the SMD base URL. If
-    #      there is already a trusted certificate, this can be blank ("").
-    #   4. Cache validity duration. Coresmd uses a pull-through cache to store
-    #      network information and this is the duration to refresh that cache.
-    #   5. Lease duration.
-    #   6. Whether to use single port mode. In this mode, the TFTP server will
-    #      send responses to the client's source port. This mode allows the
-    #      server to operate in a NATed environment.
-    - coresmd: https://foobar.openchami.cluster http://172.16.0.253:8081 /root_ca/root_ca.crt 30s 1h false
+    #   1. Path to coresmd configuration file (YAML)
+    #
+    # See examples/coresmd-config.yaml for full configuration options including:
+    #   - SMD base URL and CA certificate
+    #   - Boot script base URL
+    #   - Cache and lease durations
+    #   - TFTP single port mode
+    #   - Hostname patterns for nodes and BMCs
+    #   - Domain configuration
+    #
+    - coresmd: /etc/coresmd/coresmd-config.yaml
 
     # Any requests reaching this point are unknown to SMD and it is up to the
     # administrator to decide how to handle unknown packets.

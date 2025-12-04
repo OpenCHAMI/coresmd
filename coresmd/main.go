@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -36,11 +37,14 @@ var Plugin = plugins.Plugin{
 }
 
 var (
-	cache             *Cache
-	baseURL           *url.URL
-	bootScriptBaseURL *url.URL
-	leaseDuration     time.Duration
-	singlePort        bool
+	cache               *Cache
+	baseURL             *url.URL
+	bootScriptBaseURL   *url.URL
+	leaseDuration       time.Duration
+	singlePort          bool
+	nodeHostnamePattern string
+	bmcHostnamePattern  string
+	hostnameDomain      string
 )
 
 const (
@@ -60,59 +64,131 @@ func setup6(args ...string) (handler.Handler6, error) {
 func setup4(args ...string) (handler.Handler4, error) {
 	logVersion()
 
-	// Ensure all required args were passed
-	if len(args) != 6 {
-		return nil, errors.New("expected 6 arguments: base URL, boot script base URL, CA certificate path, cache duration, lease duration, single port mode")
-	}
-
-	// Create new SmdClient using first argument (base URL)
-	log.Debug("generating new SmdClient")
 	var err error
-	baseURL, err = url.Parse(args[0])
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse base URL: %w", err)
-	}
-	smdClient := NewSmdClient(baseURL)
+	var smdClient *SmdClient
 
-	// Parse from the second argument the insecure URL used by iPXE clients
-	// to fetch their boot script via HTTP without a certificate
-	log.Debug("parsing boot script base URL")
-	bootScriptBaseURL, err = url.Parse(args[1])
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse boot script base URL: %w", err)
-	}
-
-	// If nonempty, test that CA cert path exists (third argument)
-	caCertPath := strings.Trim(args[2], `"'`)
-	log.Infof("cacertPath: %s", caCertPath)
-	if caCertPath != "" {
-		if err := smdClient.UseCACert(caCertPath); err != nil {
-			return nil, fmt.Errorf("failed to set CA certificate: %w", err)
+	// Check if using new config file format (1 arg) or old format (6+ args)
+	if len(args) == 1 {
+		// NEW FORMAT: Single argument is path to config file
+		log.Infof("loading configuration from file: %s", args[0])
+		config, err := LoadConfig(args[0])
+		if err != nil {
+			return nil, fmt.Errorf("failed to load config: %w", err)
 		}
-		log.Infof("set CA certificate for SMD to the contents of %s", caCertPath)
+
+		if err := config.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid config: %w", err)
+		}
+
+		// Create new SmdClient
+		log.Debug("generating new SmdClient")
+		baseURL, err = url.Parse(config.SMD.BaseURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse base URL: %w", err)
+		}
+		smdClient = NewSmdClient(baseURL)
+
+		// Parse boot script base URL
+		log.Debug("parsing boot script base URL")
+		bootScriptBaseURL, err = url.Parse(config.Boot.ScriptBaseURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse boot script base URL: %w", err)
+		}
+
+		// Set CA certificate if provided
+		if config.SMD.CACertPath != "" {
+			log.Infof("setting CA certificate from %s", config.SMD.CACertPath)
+			if err := smdClient.UseCACert(config.SMD.CACertPath); err != nil {
+				return nil, fmt.Errorf("failed to set CA certificate: %w", err)
+			}
+		} else {
+			log.Info("CA certificate path not configured")
+		}
+
+		// Create cache
+		log.Debug("generating new Cache")
+		cache, err = NewCache(config.SMD.CacheDuration, smdClient)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create new cache: %w", err)
+		}
+
+		// Set lease duration
+		log.Debug("setting lease duration")
+		leaseDuration, err = time.ParseDuration(config.DHCP.LeaseDuration)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse lease duration: %w", err)
+		}
+
+		// Set TFTP mode
+		singlePort = config.TFTP.SinglePort
+
+		// Set hostname patterns
+		nodeHostnamePattern = config.Hostname.NodePattern
+		bmcHostnamePattern = config.Hostname.BMCPattern
+		hostnameDomain = config.Hostname.Domain
+		log.Infof("hostname config - node: %s, BMC: %s, domain: %s",
+			nodeHostnamePattern, bmcHostnamePattern, hostnameDomain)
+
+	} else if len(args) == 6 {
+		// OLD FORMAT: 6 arguments (backwards compatibility)
+		log.Warn("using deprecated argument format, consider migrating to config file")
+
+		// Create new SmdClient using first argument (base URL)
+		log.Debug("generating new SmdClient")
+		baseURL, err = url.Parse(args[0])
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse base URL: %w", err)
+		}
+		smdClient = NewSmdClient(baseURL)
+
+		// Parse from the second argument the insecure URL used by iPXE clients
+		log.Debug("parsing boot script base URL")
+		bootScriptBaseURL, err = url.Parse(args[1])
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse boot script base URL: %w", err)
+		}
+
+		// If nonempty, test that CA cert path exists (third argument)
+		caCertPath := strings.Trim(args[2], `"'`)
+		log.Infof("cacertPath: %s", caCertPath)
+		if caCertPath != "" {
+			if err := smdClient.UseCACert(caCertPath); err != nil {
+				return nil, fmt.Errorf("failed to set CA certificate: %w", err)
+			}
+			log.Infof("set CA certificate for SMD to the contents of %s", caCertPath)
+		} else {
+			log.Infof("CA certificate path was empty, not setting")
+		}
+
+		// Create new Cache using fourth argument (cache validity duration)
+		log.Debug("generating new Cache")
+		cache, err = NewCache(args[3], smdClient)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create new cache: %w", err)
+		}
+
+		// Set lease duration from fifth argument
+		log.Debug("setting lease duration")
+		leaseDuration, err = time.ParseDuration(args[4])
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse lease duration: %w", err)
+		}
+
+		// Parse single port mode from sixth argument
+		log.Debug("determining port mode")
+		singlePort, err = strconv.ParseBool(args[5])
+		if err != nil {
+			return nil, fmt.Errorf("invalid single port toggle '%s', use 'true' or 'false'", args[5])
+		}
+
+		// Use default hostname patterns for backwards compatibility
+		nodeHostnamePattern = "nid{04d}"
+		bmcHostnamePattern = ""
+		hostnameDomain = ""
+		log.Info("using default hostname pattern: nid{04d} (no BMC pattern, no domain)")
+
 	} else {
-		log.Infof("CA certificate path was empty, not setting")
-	}
-
-	// Create new Cache using fourth argument (cache validity duration) and new SmdClient
-	// pointer
-	log.Debug("generating new Cache")
-	cache, err = NewCache(args[3], smdClient)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new cache: %w", err)
-	}
-
-	// Set lease duration from fifth argument
-	log.Debug("setting lease duration")
-	leaseDuration, err = time.ParseDuration(args[4])
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse lease duration: %w", err)
-	}
-
-	log.Debug("determining port mode")
-	singlePort, err = strconv.ParseBool(args[5])
-	if err != nil {
-		return nil, fmt.Errorf("invalid single port toggle '%s', use 'true' or 'false'", args[5])
+		return nil, errors.New("expected either 1 argument (config file path) or 6 arguments (legacy: base URL, boot script base URL, CA certificate path, cache duration, lease duration, single port mode)")
 	}
 
 	cache.RefreshLoop()
@@ -155,8 +231,20 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	log.Infof("assigning %s to %s (%s) with a lease duration of %s", assignedIP, ifaceInfo.MAC, ifaceInfo.Type, leaseDuration)
 
 	// Set client hostname
-	if ifaceInfo.Type == "Node" {
-		resp.Options.Update(dhcpv4.OptHostName(fmt.Sprintf("nid%04d", ifaceInfo.CompNID)))
+	if ifaceInfo.Type == "Node" && nodeHostnamePattern != "" {
+		hostname := expandHostnamePattern(nodeHostnamePattern, ifaceInfo.CompNID, ifaceInfo.CompID)
+		if hostnameDomain != "" {
+			hostname = hostname + "." + hostnameDomain
+		}
+		resp.Options.Update(dhcpv4.OptHostName(hostname))
+		log.Debugf("setting hostname to %s for node %s", hostname, ifaceInfo.CompID)
+	} else if ifaceInfo.Type == "NodeBMC" && bmcHostnamePattern != "" {
+		hostname := expandHostnamePattern(bmcHostnamePattern, ifaceInfo.CompNID, ifaceInfo.CompID)
+		if hostnameDomain != "" {
+			hostname = hostname + "." + hostnameDomain
+		}
+		resp.Options.Update(dhcpv4.OptHostName(hostname))
+		log.Debugf("setting hostname to %s for BMC %s", hostname, ifaceInfo.CompID)
 	}
 
 	// Set root path to this server's IP
@@ -212,4 +300,21 @@ func lookupMAC(mac string) (IfaceInfo, error) {
 	ii.IPList = ipList
 
 	return ii, nil
+}
+
+// expandHostnamePattern replaces {Nd} with zero-padded NID and {id} with xname
+// Example patterns:
+//   - "nid{04d}" with NID=1 => "nid0001"
+//   - "dev-s{02d}" with NID=5 => "dev-s05"
+//   - "bmc{03d}" with NID=42 => "bmc042"
+//   - "{id}" with xname="x3000c0s0b1" => "x3000c0s0b1"
+func expandHostnamePattern(pattern string, nid int64, id string) string {
+	out := strings.ReplaceAll(pattern, "{id}", id)
+	re := regexp.MustCompile(`\{0*(\d+)d\}`)
+	out = re.ReplaceAllStringFunc(out, func(m string) string {
+		nStr := re.FindStringSubmatch(m)[1]
+		n, _ := strconv.Atoi(nStr)
+		return fmt.Sprintf("%0*d", n, nid)
+	})
+	return out
 }

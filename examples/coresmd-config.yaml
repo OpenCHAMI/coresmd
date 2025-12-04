@@ -1,0 +1,53 @@
+# CoreSMD Plugin Configuration
+# This file configures the coresmd DHCP plugin
+
+# SMD (State Management Database) settings
+smd:
+  # Base URL for SMD API
+  base_url: "https://smd.example.cluster"
+  
+  # Path to CA certificate for TLS (optional, leave empty to skip TLS verification)
+  ca_cert_path: "/etc/coresmd/ca.crt"
+  
+  # How often to refresh the cache of network information from SMD
+  cache_duration: "30s"
+
+# Boot settings
+boot:
+  # Base URL for boot script retrieval (used by iPXE)
+  # This is typically an HTTP endpoint without TLS
+  script_base_url: "http://172.16.0.253:8081"
+
+# DHCP settings
+dhcp:
+  # How long DHCP leases should last
+  lease_duration: "1h"
+
+# TFTP settings
+tftp:
+  # Single port mode - allows operation in NATed environments
+  # Set to true if running behind NAT
+  single_port: false
+
+# Hostname generation settings
+hostname:
+  # Pattern for node hostnames
+  # Supports: {Nd} for zero-padded NID, {id} for xname
+  # Examples:
+  #   "nid{04d}" -> nid0001, nid0002, ...
+  #   "dev-s{02d}" -> dev-s01, dev-s02, ...
+  #   "{id}" -> x3000c0s0b0n0, x3000c0s0b0n1, ...
+  node_pattern: "nid{04d}"
+  
+  # Pattern for BMC hostnames (same format as node_pattern)
+  # Examples:
+  #   "bmc{03d}" -> bmc001, bmc002, ...
+  #   "{id}" -> x3000c0s0b1, x3000c0s1b1, ...
+  bmc_pattern: "bmc{03d}"
+  
+  # Domain to append to hostnames (optional)
+  # Examples:
+  #   "cluster.local" -> nid0001.cluster.local
+  #   "dev-osc.lanl.gov" -> dev-s01.dev-osc.lanl.gov
+  #   "" -> nid0001 (no domain)
+  domain: "cluster.local"
