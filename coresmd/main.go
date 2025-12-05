@@ -52,6 +52,19 @@ const (
 	defaultTFTPPort      = 69
 )
 
+// pluginConfig holds the parsed configuration for the coresmd plugin
+type pluginConfig struct {
+	SmdURL        string
+	BootScriptURL string
+	CACertPath    string
+	CacheDuration string
+	LeaseDuration string
+	SinglePort    bool
+	NodePattern   string
+	BmcPattern    string
+	Domain        string
+}
+
 func logVersion() {
 	log.Infof("initializing coresmd/coresmd %s (%s), built %s", version.Version, version.GitState, version.BuildTime)
 	log.WithFields(version.VersionInfo).Debugln("detailed version info")
@@ -61,135 +74,169 @@ func setup6(args ...string) (handler.Handler6, error) {
 	return nil, errors.New("coresmd does not currently support DHCPv6")
 }
 
+// parseSetup4Args parses the arguments for setup4 and returns a pluginConfig.
+// It supports both key=value format and legacy positional arguments (6 or 9 args).
+func parseSetup4Args(args ...string) (*pluginConfig, error) {
+	config := &pluginConfig{
+		NodePattern: "nid{04d}",
+		BmcPattern:  "",
+		Domain:      "",
+		SinglePort:  false,
+	}
+
+	// Detect format: key=value pairs vs legacy positional arguments
+	useKeyValue := false
+	for _, arg := range args {
+		if strings.Contains(arg, "=") {
+			useKeyValue = true
+			break
+		}
+	}
+
+	if useKeyValue {
+		// NEW KEY-VALUE FORMAT: Parse key=value arguments
+		configMap := make(map[string]string)
+
+		for _, arg := range args {
+			parts := strings.SplitN(arg, "=", 2)
+			if len(parts) != 2 {
+				return nil, fmt.Errorf("invalid argument format '%s', expected key=value", arg)
+			}
+			key := strings.TrimSpace(parts[0])
+			value := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
+			configMap[key] = value
+		}
+
+		// Validate and extract required parameters
+		requiredKeys := []string{"smd_url", "boot_script_url", "cache_duration", "lease_duration"}
+		for _, key := range requiredKeys {
+			if _, ok := configMap[key]; !ok {
+				return nil, fmt.Errorf("missing required parameter: %s", key)
+			}
+		}
+
+		config.SmdURL = configMap["smd_url"]
+		config.BootScriptURL = configMap["boot_script_url"]
+		config.CacheDuration = configMap["cache_duration"]
+		config.LeaseDuration = configMap["lease_duration"]
+
+		// Optional parameters
+		if val, ok := configMap["ca_cert"]; ok {
+			config.CACertPath = val
+		}
+		if val, ok := configMap["node_pattern"]; ok {
+			config.NodePattern = val
+		}
+		if val, ok := configMap["bmc_pattern"]; ok {
+			config.BmcPattern = val
+		}
+		if val, ok := configMap["domain"]; ok {
+			config.Domain = val
+		}
+		if val, ok := configMap["single_port"]; ok {
+			singlePortBool, err := strconv.ParseBool(val)
+			if err != nil {
+				return nil, fmt.Errorf("invalid single_port value '%s', use 'true' or 'false'", val)
+			}
+			config.SinglePort = singlePortBool
+		}
+
+	} else if len(args) == 6 || len(args) == 9 {
+		// LEGACY POSITIONAL FORMAT: backwards compatibility
+		config.SmdURL = args[0]
+		config.BootScriptURL = args[1]
+		config.CACertPath = strings.Trim(args[2], `"'`)
+		config.CacheDuration = args[3]
+		config.LeaseDuration = args[4]
+
+		singlePortBool, err := strconv.ParseBool(args[5])
+		if err != nil {
+			return nil, fmt.Errorf("invalid single port toggle '%s'", args[5])
+		}
+		config.SinglePort = singlePortBool
+
+		// Handle hostname configuration (args 6-8 if present)
+		if len(args) == 9 {
+			config.NodePattern = strings.Trim(args[6], `"'`)
+			config.BmcPattern = strings.Trim(args[7], `"'`)
+			config.Domain = strings.Trim(args[8], `"'`)
+		}
+
+	} else {
+		return nil, fmt.Errorf("invalid arguments: use key=value format or legacy positional format (6 or 9 args), got %d args", len(args))
+	}
+
+	return config, nil
+}
+
 func setup4(args ...string) (handler.Handler4, error) {
 	logVersion()
 
-	var err error
-	var smdClient *SmdClient
-
-	// Check if using new config file format (1 arg) or old format (6+ args)
-	if len(args) == 1 {
-		// NEW FORMAT: Single argument is path to config file
-		log.Infof("loading configuration from file: %s", args[0])
-		config, err := LoadConfig(args[0])
-		if err != nil {
-			return nil, fmt.Errorf("failed to load config: %w", err)
-		}
-
-		if err := config.Validate(); err != nil {
-			return nil, fmt.Errorf("invalid config: %w", err)
-		}
-
-		// Create new SmdClient
-		log.Debug("generating new SmdClient")
-		baseURL, err = url.Parse(config.SMD.BaseURL)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse base URL: %w", err)
-		}
-		smdClient = NewSmdClient(baseURL)
-
-		// Parse boot script base URL
-		log.Debug("parsing boot script base URL")
-		bootScriptBaseURL, err = url.Parse(config.Boot.ScriptBaseURL)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse boot script base URL: %w", err)
-		}
-
-		// Set CA certificate if provided
-		if config.SMD.CACertPath != "" {
-			log.Infof("setting CA certificate from %s", config.SMD.CACertPath)
-			if err := smdClient.UseCACert(config.SMD.CACertPath); err != nil {
-				return nil, fmt.Errorf("failed to set CA certificate: %w", err)
-			}
-		} else {
-			log.Info("CA certificate path not configured")
-		}
-
-		// Create cache
-		log.Debug("generating new Cache")
-		cache, err = NewCache(config.SMD.CacheDuration, smdClient)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create new cache: %w", err)
-		}
-
-		// Set lease duration
-		log.Debug("setting lease duration")
-		leaseDuration, err = time.ParseDuration(config.DHCP.LeaseDuration)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse lease duration: %w", err)
-		}
-
-		// Set TFTP mode
-		singlePort = config.TFTP.SinglePort
-
-		// Set hostname patterns
-		nodeHostnamePattern = config.Hostname.NodePattern
-		bmcHostnamePattern = config.Hostname.BMCPattern
-		hostnameDomain = config.Hostname.Domain
-		log.Infof("hostname config - node: %s, BMC: %s, domain: %s",
-			nodeHostnamePattern, bmcHostnamePattern, hostnameDomain)
-
-	} else if len(args) == 6 {
-		// OLD FORMAT: 6 arguments (backwards compatibility)
-		log.Warn("using deprecated argument format, consider migrating to config file")
-
-		// Create new SmdClient using first argument (base URL)
-		log.Debug("generating new SmdClient")
-		baseURL, err = url.Parse(args[0])
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse base URL: %w", err)
-		}
-		smdClient = NewSmdClient(baseURL)
-
-		// Parse from the second argument the insecure URL used by iPXE clients
-		log.Debug("parsing boot script base URL")
-		bootScriptBaseURL, err = url.Parse(args[1])
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse boot script base URL: %w", err)
-		}
-
-		// If nonempty, test that CA cert path exists (third argument)
-		caCertPath := strings.Trim(args[2], `"'`)
-		log.Infof("cacertPath: %s", caCertPath)
-		if caCertPath != "" {
-			if err := smdClient.UseCACert(caCertPath); err != nil {
-				return nil, fmt.Errorf("failed to set CA certificate: %w", err)
-			}
-			log.Infof("set CA certificate for SMD to the contents of %s", caCertPath)
-		} else {
-			log.Infof("CA certificate path was empty, not setting")
-		}
-
-		// Create new Cache using fourth argument (cache validity duration)
-		log.Debug("generating new Cache")
-		cache, err = NewCache(args[3], smdClient)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create new cache: %w", err)
-		}
-
-		// Set lease duration from fifth argument
-		log.Debug("setting lease duration")
-		leaseDuration, err = time.ParseDuration(args[4])
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse lease duration: %w", err)
-		}
-
-		// Parse single port mode from sixth argument
-		log.Debug("determining port mode")
-		singlePort, err = strconv.ParseBool(args[5])
-		if err != nil {
-			return nil, fmt.Errorf("invalid single port toggle '%s', use 'true' or 'false'", args[5])
-		}
-
-		// Use default hostname patterns for backwards compatibility
-		nodeHostnamePattern = "nid{04d}"
-		bmcHostnamePattern = ""
-		hostnameDomain = ""
-		log.Info("using default hostname pattern: nid{04d} (no BMC pattern, no domain)")
-
-	} else {
-		return nil, errors.New("expected either 1 argument (config file path) or 6 arguments (legacy: base URL, boot script base URL, CA certificate path, cache duration, lease duration, single port mode)")
+	// Parse arguments
+	config, err := parseSetup4Args(args...)
+	if err != nil {
+		return nil, err
 	}
+
+	// Log format being used
+	for _, arg := range args {
+		if strings.Contains(arg, "=") {
+			log.Debug("using key=value configuration format")
+			break
+		}
+	}
+	if len(args) == 6 || len(args) == 9 {
+		log.Warn("using legacy positional argument format, consider migrating to key=value format")
+	}
+
+	// Create SMD client
+	log.Debug("generating new SmdClient")
+	baseURL, err = url.Parse(config.SmdURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse smd_url: %w", err)
+	}
+	smdClient := NewSmdClient(baseURL)
+
+	// Parse boot script URL
+	log.Debug("parsing boot script base URL")
+	bootScriptBaseURL, err = url.Parse(config.BootScriptURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse boot_script_url: %w", err)
+	}
+
+	// Set CA certificate if provided
+	if config.CACertPath != "" {
+		log.Infof("setting CA certificate from %s", config.CACertPath)
+		if err := smdClient.UseCACert(config.CACertPath); err != nil {
+			return nil, fmt.Errorf("failed to set CA certificate: %w", err)
+		}
+	} else {
+		log.Info("CA certificate path not configured")
+	}
+
+	// Create cache
+	log.Debug("generating new Cache")
+	cache, err = NewCache(config.CacheDuration, smdClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cache: %w", err)
+	}
+
+	// Set lease duration
+	log.Debug("setting lease duration")
+	leaseDuration, err = time.ParseDuration(config.LeaseDuration)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse lease_duration: %w", err)
+	}
+
+	// Set TFTP single port mode
+	singlePort = config.SinglePort
+
+	// Set hostname patterns
+	nodeHostnamePattern = config.NodePattern
+	bmcHostnamePattern = config.BmcPattern
+	hostnameDomain = config.Domain
+	log.Infof("hostname config - node: %s, BMC: %s, domain: %s",
+		nodeHostnamePattern, bmcHostnamePattern, hostnameDomain)
 
 	cache.RefreshLoop()
 

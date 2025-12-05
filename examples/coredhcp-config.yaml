@@ -35,18 +35,51 @@ server4:
     # here. Otherwise, the packet processing continues to any plugins after
     # this.
     #
-    # ARGUMENTS:
-    #   1. Path to coresmd configuration file (YAML)
+    # CONFIGURATION (key=value format - recommended):
     #
-    # See examples/coresmd-config.yaml for full configuration options including:
-    #   - SMD base URL and CA certificate
-    #   - Boot script base URL
-    #   - Cache and lease durations
-    #   - TFTP single port mode
-    #   - Hostname patterns for nodes and BMCs
-    #   - Domain configuration
+    # Required parameters:
+    #   smd_url           - SMD API base URL (must be https or http)
+    #   boot_script_url   - Boot script URL for iPXE clients (HTTP, no TLS required)
+    #   cache_duration    - Cache refresh interval (e.g., 30s, 5m, 1h)
+    #   lease_duration    - DHCP lease time (e.g., 1h, 24h, 7d)
     #
-    - coresmd: /etc/coresmd/coresmd-config.yaml
+    # Optional parameters:
+    #   ca_cert           - Path to CA certificate file (omit or empty for no TLS validation)
+    #   single_port       - Single port mode for NAT environments (true/false, default: false)
+    #   node_pattern      - Node hostname pattern (default: nid{04d})
+    #   bmc_pattern       - BMC hostname pattern (default: empty, no BMC hostnames)
+    #   domain            - Domain suffix to append to all hostnames (default: empty)
+    #
+    # Hostname Pattern Syntax:
+    #   {Nd} - Zero-padded NID where N is the number of digits
+    #          Examples: {04d} → 0001, 0042, 1234
+    #                   {02d} → 01, 42, 99
+    #                   {05d} → 00001, 00042, 12345
+    #   {id} - Component xname (e.g., x3000c0s0b0n0 for nodes, x3000c0s0b1 for BMCs)
+    #
+    # You can mix literal text with placeholders:
+    #   "compute-{04d}"     → compute-0001, compute-0042
+    #   "node-{id}"         → node-x3000c0s0b0n0
+    #   "dev-s{02d}"        → dev-s01, dev-s42
+    #
+    # Example 1: Basic configuration with defaults
+    # Nodes get hostnames like "nid0001", "nid0002", no domain, no BMC hostnames
+    - coresmd: smd_url=https://foobar.openchami.cluster boot_script_url=http://172.16.0.253:8081 ca_cert=/root_ca/root_ca.crt cache_duration=30s lease_duration=1h
+    #
+    # Example 2: Custom hostname patterns with domain (LANL-style)
+    # Nodes: dev-s01.dev-osc.lanl.gov, dev-s02.dev-osc.lanl.gov
+    # BMCs:  bmc001.dev-osc.lanl.gov, bmc002.dev-osc.lanl.gov
+    # - coresmd: smd_url=https://smd.dev-osc.lanl.gov boot_script_url=http://172.16.0.253:8081 ca_cert=/etc/ssl/certs/lanl-ca.crt cache_duration=30s lease_duration=24h node_pattern="dev-s{02d}" bmc_pattern="bmc{03d}" domain=dev-osc.lanl.gov
+    #
+    # Example 3: Using xnames directly as hostnames
+    # Nodes: x3000c0s0b0n0.cluster.local
+    # BMCs:  x3000c0s0b1.cluster.local
+    # - coresmd: smd_url=https://smd.cluster.local boot_script_url=http://192.168.1.1 cache_duration=30s lease_duration=1h node_pattern="{id}" bmc_pattern="{id}" domain=cluster.local
+    #
+    # Legacy positional format (backwards compatibility - 6 or 9 arguments):
+    # 6 args:  smd_url boot_script_url ca_cert cache_duration lease_duration single_port
+    # 9 args:  ... (same 6) ... node_pattern bmc_pattern domain
+    # Note: Key=value format is recommended as it's clearer and order-independent
 
     # Any requests reaching this point are unknown to SMD and it is up to the
     # administrator to decide how to handle unknown packets.

@@ -154,7 +154,49 @@ Because the plugins integrate with SMD, also verify that your SMD instance is re
 
 ### Configuration
 
-CoreDHCP requires a config file to run. See [`examples/coredhcp-config.yaml`](examples/coredhcp-config.yaml) for an example with detailed comments on how to enable and configure **coresmd** and **bootloop**.
+CoreDHCP requires a config file to run. See [`examples/coredhcp-config.yaml`](examples/coredhcp-config.yaml) for a comprehensive example with detailed comments on how to enable and configure **coresmd** and **bootloop**.
+
+#### CoreSMD Plugin Configuration
+
+The **coresmd** plugin uses a **key=value** format for configuration. This format is recommended as it's clear, order-independent, and easy to maintain.
+
+**Minimal configuration:**
+```yaml
+- coresmd: smd_url=https://smd.cluster.local boot_script_url=http://192.168.1.1 cache_duration=30s lease_duration=24h
+```
+
+**Required Parameters:**
+- `smd_url` - SMD API base URL
+- `boot_script_url` - Boot script URL for iPXE clients (HTTP)
+- `cache_duration` - How often to refresh SMD data (e.g., `30s`, `5m`, `1h`)
+- `lease_duration` - DHCP lease time (e.g., `1h`, `24h`)
+
+**Optional Parameters:**
+- `ca_cert` - Path to CA certificate for SMD TLS (omit if not needed)
+- `single_port` - Single port mode for NAT (`true`/`false`, default: `false`)
+- `node_pattern` - Hostname pattern for compute nodes (default: `nid{04d}`)
+- `bmc_pattern` - Hostname pattern for BMCs (default: empty, no hostnames)
+- `domain` - Domain suffix for all hostnames (default: empty)
+
+**Hostname Patterns:**
+
+The plugin supports configurable hostname generation using patterns:
+- **`{Nd}`** - Zero-padded NID where N is digit count (e.g., `{04d}` → `0001`, `{02d}` → `01`)
+- **`{id}`** - Component xname (e.g., `x3000c0s0b0n0`)
+
+Examples:
+```yaml
+# Default: nodes get nid0001, nid0002, etc.
+- coresmd: smd_url=https://smd.local boot_script_url=http://192.168.1.1 cache_duration=30s lease_duration=1h
+
+# Custom: compute-00001.hpc.local, bmc001.hpc.local
+- coresmd: smd_url=https://smd.local boot_script_url=http://192.168.1.1 cache_duration=30s lease_duration=1h node_pattern="compute-{05d}" bmc_pattern="bmc{03d}" domain=hpc.local
+
+# Xnames: x3000c0s0b0n0.cluster.local
+- coresmd: smd_url=https://smd.local boot_script_url=http://192.168.1.1 cache_duration=30s lease_duration=1h node_pattern="{id}" bmc_pattern="{id}" domain=cluster.local
+```
+
+For detailed hostname configuration examples, see [`coredhcp/README.md`](coredhcp/README.md).
 
 ### Preparation: SMD and BSS
 

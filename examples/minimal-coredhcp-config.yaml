@@ -1,18 +1,24 @@
 # Minimal CoreDHCP configuration with CoreSMD plugin
 # This configuration provides DHCP services for OpenCHAMI cluster components
+#
+# For detailed configuration examples and hostname pattern documentation,
+# see coredhcp-config.yaml
 
-# Server configuration
 server4:
-  # Listen on all interfaces, port 67
-  - address: 0.0.0.0:67
-  # Listen on specific interface (uncomment and modify as needed)
-  # - address: 192.168.1.1:67
+  plugins:
+    # Basic DHCP configuration
+    - server_id: 192.168.1.1
+    - dns: 8.8.8.8 1.1.1.1
+    - router: 192.168.1.254
+    - netmask: 255.255.255.0
 
-# DHCPv4 plugins
-plugins4:
-  # CoreSMD plugin for dynamic IP assignment
-  # Takes a single argument: path to coresmd configuration file
-  - coresmd: "/etc/coresmd/coresmd-config.yaml"
+    # CoreSMD plugin with minimal configuration
+    # This uses default hostname patterns: nodes get "nid0001", "nid0002", etc.
+    # No BMC hostnames are assigned, and no domain suffix is added
+    - coresmd: smd_url=https://smd.cluster.local boot_script_url=http://192.168.1.1 cache_duration=30s lease_duration=24h
+
+    # To customize hostnames, add node_pattern, bmc_pattern, and/or domain parameters:
+    # - coresmd: smd_url=https://smd.cluster.local boot_script_url=http://192.168.1.1 cache_duration=30s lease_duration=24h node_pattern="compute-{04d}" bmc_pattern="bmc{03d}" domain=cluster.local
 
 # Logging configuration
 log:
