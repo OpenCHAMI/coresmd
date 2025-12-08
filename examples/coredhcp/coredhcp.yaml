@@ -35,21 +35,65 @@ server4:
     # here. Otherwise, the packet processing continues to any plugins after
     # this.
     #
-    # ARGUMENTS:
-    #   1. Base URL used to communicate with SMD.
-    #   2. Base URL used to retrieve boot scripts. This is usually an HTTP URL
-    #      that BSS is listening on, since the iPXE bootloader doesn't have the
-    #      OpenCHAMI CA certificate to do proper TLS. It may also be an IP
-    #      address if name servers are not configured.
-    #   3. (OPTIONAL) Path to CA cert used for TLS with the SMD base URL. If
-    #      there is already a trusted certificate, this can be blank ("").
-    #   4. Cache validity duration. Coresmd uses a pull-through cache to store
-    #      network information and this is the duration to refresh that cache.
-    #   5. Lease duration.
-    #   6. Whether to use single port mode. In this mode, the TFTP server will
-    #      send responses to the client's source port. This mode allows the
-    #      server to operate in a NATed environment.
-    - coresmd: https://foobar.openchami.cluster http://172.16.0.253:8081 /root_ca/root_ca.crt 30s 1h false
+    # The format of configuration options below is "key=value", with no spaces
+    # on either side of the equal sign. Quotes around values are optional.
+    #
+    # CONFIGURATION KEYS
+    #
+    # svc_base_uri (REQUIRED, string)
+    #   The base URI used to communicate with SMD. The SMD API
+    #   paths are appended to this.
+    #
+    # ipxe_base_uri (REQUIRED, string)
+    #   The base URI used to retrieve boot scripts. This is usually a base HTTP
+    #   URL to BSS, since the iPXE bootloader served by CoreSMD doesn't include
+    #   an OpenCHAMI CA certificate by default to do proper TLS. It may also be
+    #   an IP address if name servers are nod configured.
+    #
+    # ca_cert (OPTIONAL, string)
+    #   The path to a certificate authority certificate used for TLS
+    #   verification when contacting SMD. This config option can be omitted if
+    #   not using HTTPS or there is already a trusted certificate in the
+    #   system's certificate bundle.
+    #
+    # cache_valid (OPTIONAL, string, default=30s)
+    #   The duration of time the SMD cache is valid. If omitted, the default
+    #   value will be used.
+    #
+    #   The format of a time duration is a sequence of decimal numbers with an
+    #   optional fraction and a unit suffix, such as "300ms"  or "2h45m". Valid
+    #   time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
+    #
+    # lease_time (OPTIONAL, string, default=1h)
+    #   The time duration that the served leases are valid. If omitted, the
+    #   default value will be used.
+    #
+    #   The format of a time duration is a sequence of decimal numbers with an
+    #   optional fraction and a unit suffix, such as "300ms"  or "2h45m". Valid
+    #   time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
+    #
+    # single_port (OPTIONAL, boolean, default=false)
+    #   A boolean option that determines whether CoreSMD should use single port
+    #   mode for TFTP. In this mode, the TFTP server will use tftp_port for all
+    #   communication instead of using random high ports. This mode can be
+    #   helpful for restrictive firewall environments or NAT configurations.
+    #
+    # tftp_dir (OPTIONAL, string, default=/tftpboot)
+    #   The filesystem path to the TFTP server root directory. If omitted, the
+    #   default value will be used.
+    #
+    # tftp_port (OPTIONAL, integer, default=69)
+    #   The transport layer network port to bind to. If omitted, the default
+    #   value will be used.
+    - coresmd: |
+        svc_base_uri=https://foobar.openchami.cluster
+        ipxe_base_uri=http://172.16.0.253:8081
+        ca_cert=/root_ca/root_ca.crt
+        cache_valid=30s
+        lease_time=1h
+        single_port=false
+        tftp_dir=/tftpboot
+        tftp_port=69
 
     # Any requests reaching this point are unknown to SMD and it is up to the
     # administrator to decide how to handle unknown packets.
@@ -84,15 +128,40 @@ server4:
     # devices that can reboot will do so (to force it to redo the entire DHCP
     # handshake).
     #
-    # ARGUMENTS:
-    #   1. Path to database file that keeps track of leased IPs. This will be
-    #      created if it does not already exist.
-    #   2. Path of iPXE to use. If using the built-in coresmd TFTP server, if
-    #      this argument is 'default', the default reboot.ipxe script is used.
-    #      This should really only be used if it is desired to do something
-    #      custom instead of rebooting.
-    #   3. Lease duration.
-    #   4. IP address beginning range.
-    #   5. IP address ending range.
+    # The format of configuration options below is "key=value", with no spaces
+    # on either side of the equal sign. Quotes around values are optional.
     #
-    - bootloop: /tmp/coredhcp.db default 5m 172.16.0.156 172.16.0.200
+    # CONFIGURATION KEYS
+    #
+    # lease_file (REQUIRED, string)
+    #   The filesystem path to a file to store the mac-IP mappings for the
+    #   leases in. The file is not expected to exist, though it will be
+    #   overwritten if so. The format of the file is an Sqlite database.
+    #
+    # script_path (OPTIONAL, string, default=default)
+    #   The filesystem path to an PXE script to serve to DHCP requests. If
+    #   using the build-in coresmd FTP server, this should be 'default', which
+    #   will make bootloop serve a simple iPXE script that reboots.
+    #
+    #   This doesn't need to be changed unless non-default boot script behavior
+    #   is desired.
+    #
+    # lease_time (OPTIONAL, string, default=5m)
+    #   The time duration that served leases are valid. If omitted, the default
+    #   value will be used.
+    #
+    #   The format of a time duration is a sequence of decimal numbers with an
+    #   optional fraction and a unit suffix, such as "300ms"  or "2h45m". Valid
+    #   time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
+    #
+    # ipv4_start (REQUIRED, string)
+    #   The start IPv4 address for the pool of IPs to assign.
+    #
+    # ipv4_end (REQUIRED, string)
+    #   The end IPv4 address for the pool of IPs to assign.
+    - bootloop: |
+        lease_file=/tmp/coredhcp.db
+        script_path=default
+        lease_time=5m
+        ipv4_start=172.16.0.156
+        ipv4_end=172.16.0.200
