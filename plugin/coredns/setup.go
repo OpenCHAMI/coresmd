@@ -10,8 +10,8 @@ import (
 	"github.com/coredns/coredns/plugin"
 	"github.com/sirupsen/logrus"
 
-	"github.com/openchami/coresmd/plugin/coredhcp/coresmd"
 	"github.com/openchami/coresmd/internal/version"
+	"github.com/openchami/coresmd/plugin/coredhcp/coresmd"
 )
 
 // Plugin represents the coresmd plugin
