@@ -42,6 +42,7 @@ func (p Plugin) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) 
 	case dns.TypeA:
 		// Handle A record queries (IPv4)
 		if ip := p.lookupA(qName); ip != nil {
+			log.Debugf("A record lookup succeeded: %s -> %s", qName, ip)
 			msg := new(dns.Msg)
 			msg.SetReply(r)
 			msg.Authoritative = true
@@ -56,6 +57,7 @@ func (p Plugin) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) 
 			}
 			msg.Answer = append(msg.Answer, rr)
 			if err := w.WriteMsg(msg); err != nil {
+				log.Errorf("Failed to write A record response for %s: %v", qName, err)
 				return dns.RcodeServerFailure, err
 			}
 
@@ -67,11 +69,13 @@ func (p Plugin) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) 
 			return dns.RcodeSuccess, nil
 		}
 		// Cache miss for A record
+		log.Debugf("A record cache miss for %s in zone %s", qName, zone)
 		CacheMisses.WithLabelValues(server, zone, "A").Inc()
 
 	case dns.TypeAAAA:
 		// Handle AAAA record queries (IPv6)
 		if ip := p.lookupAAAA(qName); ip != nil {
+			log.Debugf("AAAA record lookup succeeded: %s -> %s", qName, ip)
 			msg := new(dns.Msg)
 			msg.SetReply(r)
 			msg.Authoritative = true
@@ -86,6 +90,7 @@ func (p Plugin) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) 
 			}
 			msg.Answer = append(msg.Answer, rr)
 			if err := w.WriteMsg(msg); err != nil {
+				log.Errorf("Failed to write AAAA record response for %s: %v", qName, err)
 				return dns.RcodeServerFailure, err
 			}
 
@@ -97,11 +102,13 @@ func (p Plugin) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) 
 			return dns.RcodeSuccess, nil
 		}
 		// Cache miss for AAAA record
+		log.Debugf("AAAA record cache miss for %s in zone %s", qName, zone)
 		CacheMisses.WithLabelValues(server, zone, "AAAA").Inc()
 
 	case dns.TypePTR:
 		// Handle PTR record queries (reverse lookups)
 		if ptr := p.lookupPTR(qName); ptr != "" {
+			log.Debugf("PTR record lookup succeeded: %s -> %s", qName, ptr)
 			msg := new(dns.Msg)
 			msg.SetReply(r)
 			msg.Authoritative = true
@@ -116,6 +123,7 @@ func (p Plugin) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) 
 			}
 			msg.Answer = append(msg.Answer, rr)
 			if err := w.WriteMsg(msg); err != nil {
+				log.Errorf("Failed to write PTR record response for %s: %v", qName, err)
 				return dns.RcodeServerFailure, err
 			}
 
@@ -127,6 +135,7 @@ func (p Plugin) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) 
 			return dns.RcodeSuccess, nil
 		}
 		// Cache miss for PTR record
+		log.Debugf("PTR record cache miss for %s in zone %s", qName, zone)
 		CacheMisses.WithLabelValues(server, zone, "PTR").Inc()
 
 	default:
@@ -137,12 +146,14 @@ func (p Plugin) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) 
 	RequestDuration.WithLabelValues(server, zone).Observe(time.Since(start).Seconds())
 
 	// Fall through to the next plugin
+	log.Debugf("No match found for %s (type %s), passing to next plugin", qName, dns.TypeToString[qType])
 	return plugin.NextOrFailure(p.Name(), p.Next, ctx, w, r)
 }
 
 // lookupA tries to find an A record (IPv4) for the given name using the SMD cache and zones
 func (p *Plugin) lookupA(name string) net.IP {
 	if p.cache == nil {
+		log.Warn("Cache is nil during A record lookup")
 		return nil
 	}
 	p.cache.Mutex.RLock()
@@ -194,6 +205,7 @@ func (p *Plugin) lookupA(name string) net.IP {
 // lookupAAAA tries to find an AAAA record (IPv6) for the given name using the SMD cache and zones
 func (p *Plugin) lookupAAAA(name string) net.IP {
 	if p.cache == nil {
+		log.Warn("Cache is nil during AAAA record lookup")
 		return nil
 	}
 	p.cache.Mutex.RLock()
@@ -244,6 +256,7 @@ func (p *Plugin) lookupAAAA(name string) net.IP {
 // lookupPTR tries to find a PTR record for the given reverse lookup name (both IPv4 and IPv6)
 func (p *Plugin) lookupPTR(name string) string {
 	if p.cache == nil {
+		log.Warn("Cache is nil during PTR record lookup")
 		return ""
 	}
 	p.cache.Mutex.RLock()
