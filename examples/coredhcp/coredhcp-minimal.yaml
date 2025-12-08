@@ -28,4 +28,4 @@ plugins4:
 # Logging configuration
 log:
   level: info
-  format: text 
+  format: text

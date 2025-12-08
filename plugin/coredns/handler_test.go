@@ -10,7 +10,7 @@ import (
 	"github.com/coredns/coredns/plugin"
 	"github.com/miekg/dns"
 
-	"github.com/openchami/coresmd/coresmd"
+	"github.com/openchami/coresmd/plugin/coredhcp/coresmd"
 )
 
 // Mock plugin handler for testing

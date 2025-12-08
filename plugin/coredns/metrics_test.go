@@ -7,7 +7,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/openchami/coresmd/coresmd"
+	"github.com/openchami/coresmd/plugin/coredhcp/coresmd"
 )
 
 func TestMetricsRegistration(t *testing.T) {
