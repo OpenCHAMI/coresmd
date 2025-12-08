@@ -10,7 +10,7 @@ import (
 	"github.com/coredns/coredns/plugin"
 	"github.com/sirupsen/logrus"
 
-	"github.com/openchami/coresmd/coresmd"
+	"github.com/openchami/coresmd/plugin/coredhcp/coresmd"
 	"github.com/openchami/coresmd/internal/version"
 )
 

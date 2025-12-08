@@ -1,7 +1,7 @@
 package main
 
 import (
-	_ "github.com/openchami/coresmd/coredns/plugin"
+	_ "github.com/openchami/coresmd/plugin/coredns"
 
 	// CoreDNS plugins activated below
 	_ "github.com/coredns/coredns/plugin/bind"
