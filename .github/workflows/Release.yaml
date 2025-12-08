@@ -33,17 +33,17 @@ jobs:
             echo "mode=pr" >> $GITHUB_OUTPUT
             echo "is_release=false" >> $GITHUB_OUTPUT
             echo "docker_tag=pr-${PR_NUMBER}" >> $GITHUB_OUTPUT
-            echo "goreleaser_args=release --snapshot --skip=publish,announce" >> $GITHUB_OUTPUT
+            echo "goreleaser_args=release --snapshot --skip=announce" >> $GITHUB_OUTPUT
           elif [[ -n "${{ inputs.tag_override }}" ]]; then
             echo "mode=manual" >> $GITHUB_OUTPUT
             echo "is_release=false" >> $GITHUB_OUTPUT
             echo "docker_tag=${{ inputs.tag_override }}" >> $GITHUB_OUTPUT
-            echo "goreleaser_args=release --snapshot --skip=publish,announce" >> $GITHUB_OUTPUT
+            echo "goreleaser_args=release --snapshot --skip=announce" >> $GITHUB_OUTPUT
           else
             echo "mode=test" >> $GITHUB_OUTPUT
             echo "is_release=false" >> $GITHUB_OUTPUT
             echo "docker_tag=test" >> $GITHUB_OUTPUT
-            echo "goreleaser_args=release --snapshot --skip=publish,announce" >> $GITHUB_OUTPUT
+            echo "goreleaser_args=release --snapshot --skip=announce" >> $GITHUB_OUTPUT
           fi
           
       - name: Install dependencies
