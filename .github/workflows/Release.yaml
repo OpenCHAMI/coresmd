@@ -43,34 +43,34 @@ jobs:
       - name: Generate release notes
         if: startsWith(github.ref, 'refs/tags/')
         env:
-          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
-        run: gh api "repos/\${GITHUB_REPOSITORY}/releases/generate-notes" -F tag_name="\${{ github.ref_name }}" --jq .body > ../notes.md
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" -F tag_name="${{ github.ref_name }}" --jq .body > ../notes.md
 
       # Set environment variables required by GoReleaser
       - name: Set build environment variables
         run: |
-          echo "GIT_STATE=\$(if git diff-index --quiet HEAD --; then echo 'clean'; else echo 'dirty'; fi)" >> \$GITHUB_ENV
-          echo "BUILD_HOST=\\$(hostname)" >> \$GITHUB_ENV
-          echo "GO_VERSION=\$(go version | awk '{print \$3}')" >> \$GITHUB_ENV
-          echo "BUILD_USER=\\$(whoami)" >> \$GITHUB_ENV
-          echo "CGO_ENABLED=1" >> \$GITHUB_ENV
+          echo "GIT_STATE=$(if git diff-index --quiet HEAD --; then echo 'clean'; else echo 'dirty'; fi)" >> $GITHUB_ENV
+          echo "BUILD_HOST=$(hostname)" >> $GITHUB_ENV
+          echo "GO_VERSION=$(go version | awk '{print $3}')" >> $GITHUB_ENV
+          echo "BUILD_USER=$(whoami)" >> $GITHUB_ENV
+          echo "CGO_ENABLED=1" >> $GITHUB_ENV
           
-          if [[ "\${{ github.event_name }}" == "pull_request" ]]; then
-            echo "IS_PR_BUILD=true" >> \$GITHUB_ENV
-            echo "DOCKER_TAG=pr-\${{ github.event.number }}" >> \$GITHUB_ENV
-          elif [[ "\${{ github.event_name }}" == "workflow_dispatch" && "\${{ inputs.pr_number }}" != "" ]]; then
-            echo "IS_PR_BUILD=true" >> \$GITHUB_ENV
-            echo "DOCKER_TAG=pr-\${{ inputs.pr_number }}" >> \$GITHUB_ENV
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "IS_PR_BUILD=true" >> $GITHUB_ENV
+            echo "DOCKER_TAG=pr-${{ github.event.number }}" >> $GITHUB_ENV
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.pr_number }}" != "" ]]; then
+            echo "IS_PR_BUILD=true" >> $GITHUB_ENV
+            echo "DOCKER_TAG=pr-${{ inputs.pr_number }}" >> $GITHUB_ENV
           else
-            echo "IS_PR_BUILD=false" >> \$GITHUB_ENV
+            echo "IS_PR_BUILD=false" >> $GITHUB_ENV
           fi
 
       - name: Docker Login
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: \${{ github.actor }}
-          password: \${{ secrets.GITHUB_TOKEN }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Tag for PR
         if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.pr_number != '')
@@ -84,31 +84,31 @@ jobs:
       - name: Determine GoReleaser Args
         id: goreleaser_args
         run: |
-          if [[ "\${{ github.event_name }}" == "pull_request" || ("\${{ github.event_name }}" == "workflow_dispatch" && "\${{ inputs.pr_number }}" != "") ]]; then
-            echo "args=release --clean --skip=publish --skip=announce --skip=validate" >> \$GITHUB_OUTPUT
+          if [[ "${{ github.event_name }}" == "pull_request" || ("${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.pr_number }}" != "") ]]; then
+            echo "args=release --clean --skip=publish --skip=announce --skip=validate" >> $GITHUB_OUTPUT
           else
-            echo "args=release --clean --release-notes ../notes.md" >> \$GITHUB_OUTPUT
+            echo "args=release --clean --release-notes ../notes.md" >> $GITHUB_OUTPUT
           fi
 
       - name: Release with goreleaser
         uses: goreleaser/goreleaser-action@v6
         env:
-          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           version: '~> v2'
-          args: \${{ steps.goreleaser_args.outputs.args }}
+          args: ${{ steps.goreleaser_args.outputs.args }}
         id: goreleaser
 
       - name: Process goreleaser output
         id: process_goreleaser_output
         run: |
           echo "const fs = require('fs');" > process.js
-          echo 'const artifacts = \${{ steps.goreleaser.outputs.artifacts }}' >> process.js
+          echo 'const artifacts = ${{ steps.goreleaser.outputs.artifacts }}' >> process.js
           echo "const firstNonNullDigest = artifacts.find(artifact => artifact.extra && artifact.extra.Digest != null)?.extra.Digest;" >> process.js
           echo "console.log(firstNonNullDigest);" >> process.js
           echo "fs.writeFileSync('digest.txt', firstNonNullDigest);" >> process.js
           node process.js
-          echo "digest=\$(cat digest.txt)" >> \$GITHUB_OUTPUT
+          echo "digest=$(cat digest.txt)" >> $GITHUB_OUTPUT
 
       - name: Attest coredhcp binary linux_amd64
         uses: actions/attest-build-provenance@v3
