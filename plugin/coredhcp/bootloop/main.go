@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,14 +40,36 @@ type PluginState struct {
 	allocator allocators.Allocator
 }
 
-var log = logger.GetLogger("plugins/bootloop")
+type Config struct {
+	// Parsed from configuration file
+	leaseFile  string         // lease_file
+	leaseTime  *time.Duration // lease_time
+	ipv4Start  *net.IP        // ipv4_start
+	ipv4End    *net.IP        // ipv4_end
+	scriptPath string         // script_path
+
+	// Used, but not parse from configuration
+	ipv4Range uint32 // ipv4_range
+}
+
+func (c Config) String() string {
+	return fmt.Sprintf("ipv4_start=%s ipv4_end=%s ipv4_range=%d script_path=%s",
+		c.ipv4Start,
+		c.ipv4End,
+		c.ipv4Range,
+		c.scriptPath,
+	)
+}
+
+const (
+	defaultLeaseTime  = "5m"
+	defaultScriptPath = "default"
+)
 
 var (
-	ipv4Start  net.IP
-	ipv4End    net.IP
-	ipv4Range  int
-	p          PluginState
-	scriptPath string
+	globalConfig Config
+	log          = logger.GetLogger("plugins/bootloop")
+	p            PluginState
 )
 
 var Plugin = plugins.Plugin{
@@ -68,67 +91,42 @@ func setup6(args ...string) (handler.Handler6, error) {
 func setup4(args ...string) (handler.Handler4, error) {
 	logVersion()
 
-	// Ensure all required args were passed
-	if len(args) != 5 {
-		return nil, fmt.Errorf("wanted 5 arguments (file name, iPXE script path, lease duration, IPv4 range start, IPv4 range end), got %d", len(args))
-	}
-	var err error
-
-	// Parse file name
-	// Check other plugin args before trying to setup actual storage
-	filename := args[0]
-	if filename == "" {
-		return nil, fmt.Errorf("file path cannot be empty")
+	// Parse config from config file
+	cfg, errs := parseConfig(args...)
+	for _, err := range errs {
+		log.Error(err)
 	}
 
-	// Parse boot script path
-	scriptPath = args[1]
-	if filename == "" {
-		return nil, fmt.Errorf("script path cannot be empty; use 'default' if unsure")
+	// Validate parsed config
+	warns, errs := cfg.validate()
+	for _, warning := range warns {
+		log.Warn(warning)
+	}
+	if len(errs) > 0 {
+		for _, err := range errs {
+			log.Error(err)
+		}
+		return nil, fmt.Errorf("%d fatal errors occurred, exiting", len(errs))
 	}
 
-	// Parse short lease duration
-	p.LeaseTime, err = time.ParseDuration(args[2])
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse short lease duration %q: %w", args[0], err)
-	}
-
-	// Parse start IP
-	ipv4Start := net.ParseIP(args[3])
-	if ipv4Start.To4() == nil {
-		return nil, fmt.Errorf("invalid IPv4 address for range start: %s", args[1])
-	}
-
-	// Parse end IP
-	ipv4End := net.ParseIP(args[4])
-	if ipv4End.To4() == nil {
-		return nil, fmt.Errorf("invalid IPv4 address for range end: %s", args[2])
-	}
-
-	// Calculate range to make sure it is valid
-	if binary.BigEndian.Uint32(ipv4Start.To4()) > binary.BigEndian.Uint32(ipv4End.To4()) {
-		return nil, fmt.Errorf("start IP must be equal or higher than end IP")
-	}
-	log.Infof("IPv4 address range from %s to %s", ipv4Start.To4().String(), ipv4End.To4().String())
-	ipv4Range := binary.BigEndian.Uint32(ipv4End.To4()) - binary.BigEndian.Uint32(ipv4Start.To4()) + 1
-	log.Infof("%d addresses in range", ipv4Range)
+	// Set parsed config as global to be accessed by other functions
+	globalConfig = cfg
 
 	// Create IP address allocator based on IP range
-	p.allocator, err = bitmap.NewIPv4Allocator(ipv4Start, ipv4End)
+	var err error
+	p.allocator, err = bitmap.NewIPv4Allocator(*cfg.ipv4Start, *cfg.ipv4End)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create an allocator: %w", err)
 	}
 
 	// Set up storage backend using passed file path
-	if err := p.registerBackingDB(filename); err != nil {
+	if err := p.registerBackingDB(cfg.leaseFile); err != nil {
 		return nil, fmt.Errorf("failed to setup lease storage: %w", err)
 	}
 	p.Recordsv4, err = loadRecords(p.leasedb)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load records from file: %v", err)
+		return nil, fmt.Errorf("failed to load records from file: %w", err)
 	}
-
-	log.Info("bootloop plugin initialized")
 
 	// Allocate any pre-existing leases
 	for _, v := range p.Recordsv4 {
@@ -141,7 +139,113 @@ func setup4(args ...string) (handler.Handler4, error) {
 		}
 	}
 
+	log.Infof("bootloop plugin initialized with %s", cfg)
+
 	return p.Handler4, nil
+}
+
+// parseConfig takes a variadic array of string arguments representing an array
+// of key=value pairs and parses them into a Config struct, returning it. If any
+// errors occur, they are gathered into errs, a slice of errors, so that they
+// can be printed or handled.
+func parseConfig(argv ...string) (cfg Config, errs []error) {
+	for idx, arg := range argv {
+		opt := strings.SplitN(arg, "=", 2)
+
+		// Ensure key=val format
+		if len(opt) != 2 {
+			errs = append(errs, fmt.Errorf("arg %d: invalid format '%s', should be 'key=val' (skipping)", idx, arg))
+			continue
+		}
+
+		// Check that key is known and, if so, process value
+		switch opt[0] {
+		case "lease_file":
+			leaseFile := strings.Trim(opt[1], `"'`)
+			if leaseFile == "" {
+				errs = append(errs, fmt.Errorf("arg %d: %s: empty (skipping)", idx, opt[0]))
+				continue
+			} else {
+				cfg.leaseFile = leaseFile
+			}
+		case "script_path":
+			scriptPath := strings.Trim(opt[1], `"'`)
+			if scriptPath == "" {
+				errs = append(errs, fmt.Errorf("arg %d: %s: empty (setting to default script)", idx, opt[0]))
+				cfg.scriptPath = defaultScriptPath
+				continue
+			} else {
+				cfg.scriptPath = scriptPath
+			}
+		case "lease_time":
+			if leaseTime, err := time.ParseDuration(opt[1]); err != nil {
+				errs = append(errs, fmt.Errorf("arg %d: %s: invalid duration '%s' (skipping)", idx, opt[0], opt[1]))
+				continue
+			} else {
+				cfg.leaseTime = &leaseTime
+			}
+		case "ipv4_start":
+			ipv4Start := net.ParseIP(opt[1])
+			if ipv4Start.To4() == nil {
+				errs = append(errs, fmt.Errorf("arg %d: %s: invalid ip address '%s' (skipping)", idx, opt[0], opt[1]))
+				continue
+			} else {
+				cfg.ipv4Start = &ipv4Start
+			}
+		case "ipv4_end":
+			ipv4End := net.ParseIP(opt[1])
+			if ipv4End.To4() == nil {
+				errs = append(errs, fmt.Errorf("arg %d: %s: invalid ip address '%s' (skipping)", idx, opt[0], opt[1]))
+				continue
+			} else {
+				cfg.ipv4End = &ipv4End
+			}
+		default:
+			errs = append(errs, fmt.Errorf("arg %d: unknown config key '%s' (skipping)", idx, opt[0]))
+			continue
+		}
+	}
+	return
+}
+
+// validate validates a Config, putting warnings in warns (a []string) and fatal
+// errors in errs (a []error) so that they can be printed and handled. For
+// members of Config that support default values, default values will be set for
+// them if invalid values are detected.
+func (c *Config) validate() (warns []string, errs []error) {
+	if c.leaseFile == "" {
+		errs = append(errs, fmt.Errorf("lease_file is required"))
+	}
+	if c.ipv4Start == nil || c.ipv4End == nil {
+		if c.ipv4Start == nil {
+			errs = append(errs, fmt.Errorf("ipv4_start is required"))
+		}
+		if c.ipv4End == nil {
+			errs = append(errs, fmt.Errorf("ipv4_end is required"))
+		}
+	} else {
+		// Ensure IP range is valid
+		if binary.BigEndian.Uint32(c.ipv4Start.To4()) > binary.BigEndian.Uint32(c.ipv4End.To4()) {
+			errs = append(errs, fmt.Errorf("invalid range: ipv4_end (%s) must be equal to or higher than ipv4_start (%s)", c.ipv4End.To4(), c.ipv4Start.To4()))
+		} else {
+			// Calculate number of IP addresses in range
+			c.ipv4Range = binary.BigEndian.Uint32(c.ipv4End.To4()) - binary.BigEndian.Uint32(c.ipv4Start.To4()) + 1
+		}
+	}
+	if c.leaseTime == nil {
+		warns = append(warns, fmt.Sprintf("lease_time unset, defaulting to %s", defaultLeaseTime))
+		duration, err := time.ParseDuration(defaultLeaseTime)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("unexpected error trying to set default lease_time: %w", err))
+		} else {
+			c.leaseTime = &duration
+		}
+	}
+	if c.scriptPath == "" {
+		warns = append(warns, fmt.Sprintf("script_path unset, using default"))
+		c.scriptPath = defaultScriptPath
+	}
+	return
 }
 
 func (p *PluginState) Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
@@ -187,7 +291,7 @@ func (p *PluginState) Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) 
 	} else {
 		if string(cinfo) == "iPXE" {
 			// BOOT STAGE 2: Send URL to BSS boot script
-			resp.Options.Update(dhcpv4.OptBootFileName(scriptPath))
+			resp.Options.Update(dhcpv4.OptBootFileName(globalConfig.scriptPath))
 			resp.YourIPAddr = record.IP
 			resp.Options.Update(dhcpv4.OptIPAddressLeaseTime(p.LeaseTime.Round(time.Second)))
 		} else {
