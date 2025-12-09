@@ -87,7 +87,7 @@ jobs:
         id: goreleaser_args
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" || ("${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.pr_number }}" != "") ]]; then
-            echo "args=release --clean --skip=publish --skip=announce --skip=validate" >> $GITHUB_OUTPUT
+            echo "args=release --clean --skip=announce --skip=validate" >> $GITHUB_OUTPUT
           else
             echo "args=release --clean --release-notes ../notes.md" >> $GITHUB_OUTPUT
           fi
@@ -108,7 +108,12 @@ jobs:
           echo 'const artifacts = ${{ steps.goreleaser.outputs.artifacts }}' >> process.js
           echo "const firstNonNullDigest = artifacts.find(artifact => artifact.extra && artifact.extra.Digest != null)?.extra.Digest;" >> process.js
           echo "console.log(firstNonNullDigest);" >> process.js
-          echo "fs.writeFileSync('digest.txt', firstNonNullDigest);" >> process.js
+          echo "if (firstNonNullDigest) {" >> process.js
+          echo "  fs.writeFileSync('digest.txt', firstNonNullDigest);" >> process.js
+          echo "} else {" >> process.js
+          echo "  console.error('No digest found in artifacts');" >> process.js
+          echo "  process.exit(1);" >> process.js
+          echo "}" >> process.js
           node process.js
           echo "digest=$(cat digest.txt)" >> $GITHUB_OUTPUT
 
