@@ -15,6 +15,7 @@ import (
 	"github.com/insomniacslk/dhcp/dhcpv4"
 
 	"github.com/openchami/coresmd/internal/debug"
+	"github.com/openchami/coresmd/internal/hostname"
 	"github.com/openchami/coresmd/internal/ipxe"
 	"github.com/openchami/coresmd/internal/version"
 )
@@ -37,10 +38,13 @@ type Config struct {
 	singlePort  bool           // single_port
 	tftpDir     string         // tftp_dir
 	tftpPort    int            // tftp_port
+	bmcPattern  string         // bmc_pattern
+	nodePattern string         // node_pattern
+	domain      string         // domain
 }
 
 func (c Config) String() string {
-	return fmt.Sprintf("svc_base_uri=%s ipxe_base_uri=%s ca_cert=%s cache_valid=%s lease_time=%s single_port=%v tftp_dir=%s tftp_port=%d",
+	return fmt.Sprintf("svc_base_uri=%s ipxe_base_uri=%s ca_cert=%s cache_valid=%s lease_time=%s single_port=%v tftp_dir=%s tftp_port=%d bmc_pattern=%s node_pattern=%s domain=%s",
 		c.svcBaseURI,
 		c.ipxeBaseURI,
 		c.caCert,
@@ -49,6 +53,9 @@ func (c Config) String() string {
 		c.singlePort,
 		c.tftpDir,
 		c.tftpPort,
+		c.bmcPattern,
+		c.nodePattern,
+		c.domain,
 	)
 }
 
@@ -57,6 +64,8 @@ const (
 	defaultTFTPPort      = 69
 	defaultCacheValid    = "30s"
 	defaultLeaseTime     = "1h0m0s"
+	defaultBMCPattern    = "bmc{04d}"
+	defaultNodePattern   = "nid{04d}"
 )
 
 var (
@@ -206,6 +215,21 @@ func parseConfig(argv ...string) (cfg Config, errs []error) {
 					cfg.tftpPort = defaultTFTPPort
 				}
 			}
+		case "bmc_pattern":
+			bmcPattern := strings.Trim(opt[1], `'"`)
+			if bmcPattern != "" {
+				cfg.bmcPattern = bmcPattern
+			}
+		case "node_pattern":
+			nodePattern := strings.Trim(opt[1], `"'`)
+			if nodePattern != "" {
+				cfg.nodePattern = nodePattern
+			}
+		case "domain":
+			domain := strings.Trim(opt[1], `"'`)
+			if domain != "" {
+				cfg.domain = domain
+			}
 		default:
 			errs = append(errs, fmt.Errorf("arg %d: unknown config key '%s' (skipping)", idx, opt[0]))
 			continue
@@ -257,6 +281,17 @@ func (c *Config) validate() (warns []string, errs []error) {
 		warns = append(warns, fmt.Sprintf("tftp_dir unset, defaulting to %s", defaultTFTPDirectory))
 		c.tftpDir = defaultTFTPDirectory
 	}
+	if c.bmcPattern == "" {
+		warns = append(warns, fmt.Sprintf("bmc_pattern unset, defaulting to %s", defaultBMCPattern))
+		c.bmcPattern = defaultBMCPattern
+	}
+	if c.nodePattern == "" {
+		warns = append(warns, fmt.Sprintf("node_pattern unset, defaulting to %s", defaultNodePattern))
+		c.nodePattern = defaultNodePattern
+	}
+	if c.domain == "" {
+		warns = append(warns, "domain unset, not configuring")
+	}
 	return
 }
 
@@ -284,12 +319,29 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	} else {
 		resp.Options.Update(dhcpv4.OptIPAddressLeaseTime(*globalConfig.leaseTime))
 	}
-	log.Infof("assigning %s to %s (%s) with a lease duration of %s", assignedIP, ifaceInfo.MAC, ifaceInfo.Type, globalConfig.leaseTime)
 
 	// Set client hostname
+	hname := "(none)"
 	if ifaceInfo.Type == "Node" {
-		resp.Options.Update(dhcpv4.OptHostName(fmt.Sprintf("nid%04d", ifaceInfo.CompNID)))
+		nodeHostname := hostname.ExpandHostnamePattern(globalConfig.nodePattern, ifaceInfo.CompNID, ifaceInfo.CompID)
+		if globalConfig.domain != "" {
+			nodeHostname = nodeHostname + "." + globalConfig.domain
+		}
+		hname = nodeHostname
+		resp.Options.Update(dhcpv4.OptHostName(nodeHostname))
+		log.Debugf("setting hostname for node %s to %s", ifaceInfo.CompID, nodeHostname)
+	} else if ifaceInfo.Type == "NodeBMC" {
+		bmcHostname := hostname.ExpandHostnamePattern(globalConfig.bmcPattern, ifaceInfo.CompNID, ifaceInfo.CompID)
+		if globalConfig.domain != "" {
+			bmcHostname = bmcHostname + "." + globalConfig.domain
+		}
+		hname = bmcHostname
+		resp.Options.Update(dhcpv4.OptHostName(bmcHostname))
+		log.Debugf("setting hostname for BMC %s to %s", ifaceInfo.CompID, bmcHostname)
 	}
+
+	// Log assignment
+	log.Infof("assigning IP %s and hostname %s to %s (%s) with a lease duration of %s", assignedIP, hname, ifaceInfo.MAC, ifaceInfo.Type, globalConfig.leaseTime)
 
 	// Set root path to this server's IP
 	resp.Options.Update(dhcpv4.OptRootPath(resp.ServerIPAddr.String()))
