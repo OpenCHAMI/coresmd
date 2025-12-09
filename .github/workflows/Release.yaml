@@ -75,6 +75,8 @@ jobs:
       - name: Create Tag for PR
         if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.pr_number != '')
         run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           PR_NUM="${{ github.event.number }}"
           if [[ "${{ inputs.pr_number }}" != "" ]]; then
             PR_NUM="${{ inputs.pr_number }}"
