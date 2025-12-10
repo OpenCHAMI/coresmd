@@ -11,19 +11,12 @@ server4:
 # DHCPv4 plugins
 plugins4:
   # CoreSMD plugin for dynamic IP assignment
-  - coresmd:
-      # SMD API endpoint
-      - "https://smd.cluster.local"
-      # Boot script base URL for iPXE
-      - "http://192.168.1.1"
-      # CA certificate path (empty for no TLS verification)
-      - ""
-      # Cache duration
-      - "30s"
-      # Lease duration
-      - "24h"
-      # Single port mode
-      - "false"
+  - coresmd: |
+      svc_base_uri=http://smd.cluster.local
+      ipxe_base_uri=http://192.168.1.1
+      cache_valid=30s
+      lease_time=24h
+      single_port=false
 
 # Logging configuration
 log:
