@@ -23,6 +23,9 @@ func TestConfigString(t *testing.T) {
 		singlePort:  true,
 		tftpDir:     "/tftp",
 		tftpPort:    1069,
+		bmcPattern:  "bmc{04d}",
+		nodePattern: "nid{04d}",
+		domain:      "example.test",
 	}
 
 	s := cfg.String()
@@ -37,6 +40,9 @@ func TestConfigString(t *testing.T) {
 		"single_port=true",
 		"tftp_dir=/tftp",
 		"tftp_port=1069",
+		"bmc_pattern=bmc{04d}",
+		"node_pattern=nid{04d}",
+		"domain=example.test",
 	}
 
 	for _, sub := range wantSubstrings {
@@ -68,6 +74,9 @@ func TestParseConfig_Table(t *testing.T) {
 				"single_port=true",
 				"tftp_dir=/tftp",
 				"tftp_port=1069",
+				"bmc_pattern=bmc{03d}",
+				"node_pattern=nid{03d}",
+				"domain=cluster.local",
 			},
 			wantCfg: func() Config {
 				svc, _ := url.Parse("https://svc.example.test")
@@ -81,6 +90,9 @@ func TestParseConfig_Table(t *testing.T) {
 					singlePort:  true,
 					tftpDir:     "/tftp",
 					tftpPort:    1069,
+					bmcPattern:  "bmc{03d}",
+					nodePattern: "nid{03d}",
+					domain:      "cluster.local",
 				}
 			},
 			wantErrsMin: 0,
@@ -165,13 +177,19 @@ func TestParseConfig_Table(t *testing.T) {
 			wantErrsMin: 1,
 		},
 		{
-			name: "tftp_dir trims quotes",
+			name: "tftp_dir_and_patterns_and_domain_trim_quotes",
 			args: []string{
 				`tftp_dir="/quoted/path"`,
+				`bmc_pattern="bmc{04d}"`,
+				`node_pattern='nid{04d}'`,
+				`domain="example.test"`,
 			},
 			wantCfg: func() Config {
 				return Config{
-					tftpDir: "/quoted/path",
+					tftpDir:     "/quoted/path",
+					bmcPattern:  "bmc{04d}",
+					nodePattern: "nid{04d}",
+					domain:      "example.test",
 				}
 			},
 			wantErrsMin: 0,
@@ -220,6 +238,15 @@ func TestParseConfig_Table(t *testing.T) {
 			if gotCfg.tftpPort != wantCfg.tftpPort {
 				t.Errorf("tftpPort = %d, want %d", gotCfg.tftpPort, wantCfg.tftpPort)
 			}
+			if wantCfg.bmcPattern != "" && gotCfg.bmcPattern != wantCfg.bmcPattern {
+				t.Errorf("bmcPattern = %q, want %q", gotCfg.bmcPattern, wantCfg.bmcPattern)
+			}
+			if wantCfg.nodePattern != "" && gotCfg.nodePattern != wantCfg.nodePattern {
+				t.Errorf("nodePattern = %q, want %q", gotCfg.nodePattern, wantCfg.nodePattern)
+			}
+			if wantCfg.domain != "" && gotCfg.domain != wantCfg.domain {
+				t.Errorf("domain = %q, want %q", gotCfg.domain, wantCfg.domain)
+			}
 		})
 	}
 }
@@ -239,7 +266,7 @@ func TestConfigValidate_Table(t *testing.T) {
 		{
 			name:        "missing required URIs",
 			cfg:         Config{},
-			wantWarnMin: 1, // ca_cert / cache_valid / lease_time / tftp_* will warn
+			wantWarnMin: 1, // many warnings expected; just ensure at least one
 			wantErrMin:  2, // svc_base_uri and ipxe_base_uri required
 			check:       func(t *testing.T, cfg Config) {},
 		},
@@ -251,7 +278,7 @@ func TestConfigValidate_Table(t *testing.T) {
 			},
 			// Exact number of warnings depends on combinations; we only care that
 			// defaults are applied and there are *some* warnings.
-			wantWarnMin: 3,
+			wantWarnMin: 5,
 			wantErrMin:  0,
 			check: func(t *testing.T, cfg Config) {
 				if cfg.cacheValid == nil || cfg.cacheValid.String() != defaultCacheValid {
@@ -265,6 +292,15 @@ func TestConfigValidate_Table(t *testing.T) {
 				}
 				if cfg.tftpDir != defaultTFTPDirectory {
 					t.Errorf("tftpDir = %q, want %q", cfg.tftpDir, defaultTFTPDirectory)
+				}
+				if cfg.bmcPattern != defaultBMCPattern {
+					t.Errorf("bmcPattern = %q, want %q", cfg.bmcPattern, defaultBMCPattern)
+				}
+				if cfg.nodePattern != defaultNodePattern {
+					t.Errorf("nodePattern = %q, want %q", cfg.nodePattern, defaultNodePattern)
+				}
+				if cfg.domain != "" {
+					t.Errorf("domain = %q, want empty (unset)", cfg.domain)
 				}
 			},
 		},
@@ -280,6 +316,35 @@ func TestConfigValidate_Table(t *testing.T) {
 			check: func(t *testing.T, cfg Config) {
 				if cfg.tftpPort != defaultTFTPPort {
 					t.Errorf("tftpPort = %d, want %d", cfg.tftpPort, defaultTFTPPort)
+				}
+				if cfg.bmcPattern != defaultBMCPattern {
+					t.Errorf("bmcPattern = %q, want %q", cfg.bmcPattern, defaultBMCPattern)
+				}
+				if cfg.nodePattern != defaultNodePattern {
+					t.Errorf("nodePattern = %q, want %q", cfg.nodePattern, defaultNodePattern)
+				}
+			},
+		},
+		{
+			name: "patterns_and_domain_already_set_no_pattern_defaults",
+			cfg: Config{
+				svcBaseURI:  svc,
+				ipxeBaseURI: ipxe,
+				bmcPattern:  "bmc{03d}",
+				nodePattern: "nid{03d}",
+				domain:      "example.test",
+			},
+			wantWarnMin: 3, // ca_cert, cache_valid, lease_time at least
+			wantErrMin:  0,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.bmcPattern != "bmc{03d}" {
+					t.Errorf("bmcPattern = %q, want %q", cfg.bmcPattern, "bmc{03d}")
+				}
+				if cfg.nodePattern != "nid{03d}" {
+					t.Errorf("nodePattern = %q, want %q", cfg.nodePattern, "nid{03d}")
+				}
+				if cfg.domain != "example.test" {
+					t.Errorf("domain = %q, want %q", cfg.domain, "example.test")
 				}
 			},
 		},

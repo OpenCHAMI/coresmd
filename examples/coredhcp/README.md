@@ -2,6 +2,13 @@
 
 This directory contains example CoreDHCP configurations for the CoreSMD plugin.
 
+## Contents
+
+- [CoreDHCP Configuration Examples for CoreSMD](#coredhcp-configuration-examples-for-coresmd)
+  - [Contents](#contents)
+  - [Positional vs. Key-Value Format](#positional-vs-key-value-format)
+  - [Custom Hostnames](#custom-hostnames)
+
 ## Positional vs. Key-Value Format
 
 Prior to CoreSMD v0.5.0, positional arguments were used to configure CoreSMD which made it difficult to match configuration values to configuration keys. An example of such configuration would be:
@@ -33,3 +40,7 @@ plugins:
 ```
 
 See [coredhcp.yaml](coredhcp.yaml) for a full example with documentation comments.
+
+## Custom Hostnames
+
+Hostname patterns can be used to specify custom hostnames for nodes and BMCs. See [**hostnames.md**](hostnames.md) for more details.

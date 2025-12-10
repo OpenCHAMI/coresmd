@@ -38,6 +38,43 @@ server4:
     # The format of configuration options below is "key=value", with no spaces
     # on either side of the equal sign. Quotes around values are optional.
     #
+    # CUSTOM HOSTNAMES
+    #
+    # For node_pattern and bmc_pattern (see CONFIGURATION KEYS below), custom
+    # hostname patterns can be specified to dynamically generate custom
+    # hostnames for BMCs and nodes in SMD.
+    #
+    # Hostname Placeholder Syntax:
+    #
+    #   {Nd} - Zero-padded NID where N is the number of digits
+    #          Examples: {04d} -> 0001, 0042, 1234
+    #                    {02d} -> 01, 42, 99
+    #                    {05d} -> 00001, 00042, 12345
+    #   {id} - Component xname (e.g., x3000c0s0b0n0 for nodes, x3000c0s0b1 for
+    #          BMCs)
+    #
+    # Literal text can be mixed with placeholders:
+    #
+    #   "compute-{04d}" -> compute-0001, compute-0042
+    #   "node-{id}"     -> node-x3000c0s0b0n0
+    #   "dev-s{02d}"    -> dev-s01, dev-s42
+    #
+    # CUSTOM DOMAINS:
+    #
+    # If 'domain' is specified (see CONFIGURATION KEYS below), a custom domain
+    # will be appended to hostnames generated using the custom hostname
+    # mechanism above, making generated hostnames fully-qualified.
+    #
+    # For instance, for the following configuration:
+    #
+    #   - coresmd: ... node_pattern="{id}" bmc_pattern="{id}" domain=cluster.local
+    #
+    # {id} will be expanded to the node/BMC's xname and the domain cluster.local
+    # will be appended. For example:
+    #
+    #   BMC hostname:  x3000c0s0b1.cluster.local
+    #   Node hostname: x3000c0s0b1n0.cluster.local
+    #
     # CONFIGURATION KEYS
     #
     # svc_base_uri (REQUIRED, string)
@@ -85,6 +122,19 @@ server4:
     # tftp_port (OPTIONAL, integer, default=69)
     #   The transport layer network port to bind to. If omitted, the default
     #   value will be used.
+    #
+    # node_pattern (OPTIONAL, string, default=id{04d})
+    #   The hostname pattern to use to generate hostnames for nodes in SMD. See
+    #   CUSTOM HOSTNAMES above for details.
+    #
+    # bmc_pattern (OPTIONAL, string, default=bmc{04d})
+    #   The hostname pattern to use to generate hostnames for BMCs in SMD. See
+    #   CUSTOM HOSTNAMES above for details.
+    #
+    # domain (OPTIONAL, string)
+    #   An optional domain to append to hostnames generated with node_pattern
+    #   and bmc_pattern. If omitted, no domain will be appended. See CUSTOM
+    #   DOMAINS above for details.
     - coresmd: |
         svc_base_uri=https://foobar.openchami.cluster
         ipxe_base_uri=http://172.16.0.253:8081
@@ -94,6 +144,9 @@ server4:
         single_port=false
         tftp_dir=/tftpboot
         tftp_port=69
+        node_pattern=nid{04d}
+        bmc_pattern=bmc{04d}
+        domain=openchami.cluster
 
     # Any requests reaching this point are unknown to SMD and it is up to the
     # administrator to decide how to handle unknown packets.

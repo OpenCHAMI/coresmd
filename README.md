@@ -8,6 +8,7 @@
     - [CoreDHCP](#coredhcp)
     - [CoreDNS](#coredns)
   - [Overview](#overview)
+  - [Configuration](#configuration)
   - [Build and Install](#build-and-install)
     - [Build/Install with GoReleaser](#buildinstall-with-goreleaser)
       - [Environment Variables](#environment-variables)
@@ -18,7 +19,7 @@
     - [CoreDHCP](#coredhcp-1)
     - [CoreDNS](#coredns-1)
   - [Running](#running)
-    - [Configuration](#configuration)
+    - [Configuration](#configuration-1)
     - [Preparation: SMD and BSS](#preparation-smd-and-bss)
     - [Preparation: TFTP](#preparation-tftp)
     - [Running](#running-1)
@@ -61,6 +62,10 @@ See [**examples/coredns/**](https://github.com/OpenCHAMI/coresmd/tree/main/examp
 CoreSMD acts as a pull-through cache of DHCP and DNS information from SMD, ensuring that new or updated details in SMD can be reflected in DHCP lease assignments and DNS records. This facilitates more dynamic environments where nodes might be added or changed frequently, and also simplifies discovery of unknown devices via the **bootloop** CoreDHCP plugin.
 
 ---
+
+## Configuration
+
+Take a look at [**examples/**](examples/). In there are configuration examples and documentation for both CoreDHCP and CoreDNS.
 
 ## Build and Install
 
