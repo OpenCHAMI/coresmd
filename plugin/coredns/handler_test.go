@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
@@ -676,5 +677,520 @@ func TestLookupA_BMC_XName_Direct(t *testing.T) {
 	expected := net.ParseIP("192.168.100.10")
 	if !ip.Equal(expected) {
 		t.Errorf("Expected IP %v, got %v", expected, ip)
+	}
+}
+
+// ============================================================================
+// IPv6 Support Tests
+// ============================================================================
+
+// createTestPluginWithIPv6 creates a plugin with both IPv4 and IPv6 addresses
+func createTestPluginWithIPv6() *Plugin {
+	cache := &coresmd.Cache{
+		Duration:    1 * time.Minute,
+		Client:      &coresmd.SmdClient{},
+		LastUpdated: time.Now(),
+		Mutex:       sync.RWMutex{},
+		EthernetInterfaces: map[string]coresmd.EthernetInterface{
+			"00:11:22:33:44:55": {
+				MACAddress:  "00:11:22:33:44:55",
+				ComponentID: "node001",
+				Type:        "Node",
+				Description: "Test Node with IPv4 and IPv6",
+				IPAddresses: []struct {
+					IPAddress string `json:"IPAddress"`
+				}{
+					{IPAddress: "192.168.1.10"},
+					{IPAddress: "2001:db8::10"},
+				},
+			},
+			"aa:bb:cc:dd:ee:ff": {
+				MACAddress:  "aa:bb:cc:dd:ee:ff",
+				ComponentID: "bmc001",
+				Type:        "NodeBMC",
+				Description: "Test BMC with IPv4 and IPv6",
+				IPAddresses: []struct {
+					IPAddress string `json:"IPAddress"`
+				}{
+					{IPAddress: "192.168.1.100"},
+					{IPAddress: "2001:db8::100"},
+				},
+			},
+			"11:22:33:44:55:66": {
+				MACAddress:  "11:22:33:44:55:66",
+				ComponentID: "node002",
+				Type:        "Node",
+				Description: "Test Node with IPv6 only",
+				IPAddresses: []struct {
+					IPAddress string `json:"IPAddress"`
+				}{
+					{IPAddress: "2001:db8::20"},
+				},
+			},
+		},
+		Components: map[string]coresmd.Component{
+			"node001": {
+				ID:   "node001",
+				NID:  1,
+				Type: "Node",
+			},
+			"bmc001": {
+				ID:   "bmc001",
+				NID:  1,
+				Type: "NodeBMC",
+			},
+			"node002": {
+				ID:   "node002",
+				NID:  2,
+				Type: "Node",
+			},
+		},
+	}
+
+	return &Plugin{
+		zones: []Zone{
+			{
+				Name:        "cluster.local",
+				NodePattern: "nid{04d}",
+			},
+		},
+		cache: cache,
+	}
+}
+
+// TestServeDNS_AAAA_Record_Node tests AAAA record lookup for a node
+func TestServeDNS_AAAA_Record_Node(t *testing.T) {
+	p := createTestPluginWithIPv6()
+	mock := &mockHandler{}
+	p.Next = mock
+
+	req := new(dns.Msg)
+	req.SetQuestion("nid0001.cluster.local.", dns.TypeAAAA)
+
+	w := &mockResponseWriter{}
+
+	rcode, err := p.ServeDNS(context.Background(), w, req)
+
+	if err != nil {
+		t.Fatalf("ServeDNS failed: %v", err)
+	}
+
+	if rcode != dns.RcodeSuccess {
+		t.Errorf("Expected rcode %d (SUCCESS), got %d", dns.RcodeSuccess, rcode)
+	}
+
+	if len(w.msg.Answer) != 1 {
+		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
+	}
+
+	// Check AAAA record
+	if aaaa, ok := w.msg.Answer[0].(*dns.AAAA); ok {
+		expectedIP := net.ParseIP("2001:db8::10")
+		if !aaaa.AAAA.Equal(expectedIP) {
+			t.Errorf("Expected IPv6 %v, got %v", expectedIP, aaaa.AAAA)
+		}
+		if aaaa.Hdr.Name != "nid0001.cluster.local." {
+			t.Errorf("Expected name nid0001.cluster.local., got %s", aaaa.Hdr.Name)
+		}
+		if aaaa.Hdr.Rrtype != dns.TypeAAAA {
+			t.Errorf("Expected type AAAA (%d), got %d", dns.TypeAAAA, aaaa.Hdr.Rrtype)
+		}
+	} else {
+		t.Fatal("Answer is not an AAAA record")
+	}
+
+	// Should not call next plugin
+	if mock.called {
+		t.Error("Expected next plugin not to be called")
+	}
+}
+
+// TestServeDNS_AAAA_Record_BMC tests AAAA record lookup for a BMC
+func TestServeDNS_AAAA_Record_BMC(t *testing.T) {
+	p := createTestPluginWithIPv6()
+	mock := &mockHandler{}
+	p.Next = mock
+
+	req := new(dns.Msg)
+	req.SetQuestion("bmc001.cluster.local.", dns.TypeAAAA)
+
+	w := &mockResponseWriter{}
+
+	rcode, err := p.ServeDNS(context.Background(), w, req)
+
+	if err != nil {
+		t.Fatalf("ServeDNS failed: %v", err)
+	}
+
+	if rcode != dns.RcodeSuccess {
+		t.Errorf("Expected rcode %d (SUCCESS), got %d", dns.RcodeSuccess, rcode)
+	}
+
+	if len(w.msg.Answer) != 1 {
+		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
+	}
+
+	// Check AAAA record
+	if aaaa, ok := w.msg.Answer[0].(*dns.AAAA); ok {
+		expectedIP := net.ParseIP("2001:db8::100")
+		if !aaaa.AAAA.Equal(expectedIP) {
+			t.Errorf("Expected IPv6 %v, got %v", expectedIP, aaaa.AAAA)
+		}
+	} else {
+		t.Fatal("Answer is not an AAAA record")
+	}
+
+	if mock.called {
+		t.Error("Expected next plugin not to be called")
+	}
+}
+
+// TestServeDNS_AAAA_Record_IPv6Only tests AAAA record for IPv6-only node
+func TestServeDNS_AAAA_Record_IPv6Only(t *testing.T) {
+	p := createTestPluginWithIPv6()
+	mock := &mockHandler{}
+	p.Next = mock
+
+	req := new(dns.Msg)
+	req.SetQuestion("nid0002.cluster.local.", dns.TypeAAAA)
+
+	w := &mockResponseWriter{}
+
+	rcode, err := p.ServeDNS(context.Background(), w, req)
+
+	if err != nil {
+		t.Fatalf("ServeDNS failed: %v", err)
+	}
+
+	if rcode != dns.RcodeSuccess {
+		t.Errorf("Expected rcode %d (SUCCESS), got %d", dns.RcodeSuccess, rcode)
+	}
+
+	if len(w.msg.Answer) != 1 {
+		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
+	}
+
+	// Check AAAA record
+	if aaaa, ok := w.msg.Answer[0].(*dns.AAAA); ok {
+		expectedIP := net.ParseIP("2001:db8::20")
+		if !aaaa.AAAA.Equal(expectedIP) {
+			t.Errorf("Expected IPv6 %v, got %v", expectedIP, aaaa.AAAA)
+		}
+	} else {
+		t.Fatal("Answer is not an AAAA record")
+	}
+
+	if mock.called {
+		t.Error("Expected next plugin not to be called")
+	}
+}
+
+// TestServeDNS_A_Record_WithIPv6_OnlyReturnsIPv4 tests that A query returns only IPv4
+func TestServeDNS_A_Record_WithIPv6_OnlyReturnsIPv4(t *testing.T) {
+	p := createTestPluginWithIPv6()
+	mock := &mockHandler{}
+	p.Next = mock
+
+	req := new(dns.Msg)
+	req.SetQuestion("nid0001.cluster.local.", dns.TypeA)
+
+	w := &mockResponseWriter{}
+
+	rcode, err := p.ServeDNS(context.Background(), w, req)
+
+	if err != nil {
+		t.Fatalf("ServeDNS failed: %v", err)
+	}
+
+	if rcode != dns.RcodeSuccess {
+		t.Errorf("Expected rcode %d (SUCCESS), got %d", dns.RcodeSuccess, rcode)
+	}
+
+	if len(w.msg.Answer) != 1 {
+		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
+	}
+
+	// Check A record - should only return IPv4
+	if a, ok := w.msg.Answer[0].(*dns.A); ok {
+		expectedIP := net.ParseIP("192.168.1.10")
+		if !a.A.Equal(expectedIP) {
+			t.Errorf("Expected IPv4 %v, got %v", expectedIP, a.A)
+		}
+		// Verify it's actually IPv4
+		if a.A.To4() == nil {
+			t.Error("Expected IPv4 address, got IPv6")
+		}
+	} else {
+		t.Fatal("Answer is not an A record")
+	}
+
+	if mock.called {
+		t.Error("Expected next plugin not to be called")
+	}
+}
+
+// TestServeDNS_A_Record_IPv6Only_NoAnswer tests that A query on IPv6-only node falls through
+func TestServeDNS_A_Record_IPv6Only_NoAnswer(t *testing.T) {
+	p := createTestPluginWithIPv6()
+	mock := &mockHandler{}
+	p.Next = mock
+
+	req := new(dns.Msg)
+	req.SetQuestion("nid0002.cluster.local.", dns.TypeA)
+
+	w := &mockResponseWriter{}
+
+	_, err := p.ServeDNS(context.Background(), w, req)
+
+	if err != nil {
+		t.Fatalf("ServeDNS failed: %v", err)
+	}
+
+	// Should fall through to next plugin since no IPv4 address
+	if !mock.called {
+		t.Error("Expected next plugin to be called for IPv6-only node with A query")
+	}
+}
+
+// TestServeDNS_PTR_Record_IPv6 tests reverse lookup for IPv6 address
+func TestServeDNS_PTR_Record_IPv6(t *testing.T) {
+	p := createTestPluginWithIPv6()
+	mock := &mockHandler{}
+	p.Next = mock
+
+	// 2001:db8::10 -> 0.1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa.
+	req := new(dns.Msg)
+	req.SetQuestion("0.1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa.", dns.TypePTR)
+
+	w := &mockResponseWriter{}
+
+	rcode, err := p.ServeDNS(context.Background(), w, req)
+
+	if err != nil {
+		t.Fatalf("ServeDNS failed: %v", err)
+	}
+
+	if rcode != dns.RcodeSuccess {
+		t.Errorf("Expected rcode %d (SUCCESS), got %d", dns.RcodeSuccess, rcode)
+	}
+
+	if len(w.msg.Answer) != 1 {
+		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
+	}
+
+	// Check PTR record
+	if ptr, ok := w.msg.Answer[0].(*dns.PTR); ok {
+		if ptr.Ptr != "node001.cluster.local." {
+			t.Errorf("Expected PTR node001.cluster.local., got %s", ptr.Ptr)
+		}
+	} else {
+		t.Fatal("Answer is not a PTR record")
+	}
+
+	if mock.called {
+		t.Error("Expected next plugin not to be called")
+	}
+}
+
+// TestServeDNS_Unknown_AAAA_Record tests AAAA query for non-existent hostname
+func TestServeDNS_Unknown_AAAA_Record(t *testing.T) {
+	p := createTestPluginWithIPv6()
+	mock := &mockHandler{}
+	p.Next = mock
+
+	req := new(dns.Msg)
+	req.SetQuestion("unknown.cluster.local.", dns.TypeAAAA)
+
+	w := &mockResponseWriter{}
+
+	_, err := p.ServeDNS(context.Background(), w, req)
+
+	if err != nil {
+		t.Fatalf("ServeDNS failed: %v", err)
+	}
+
+	// Should call next plugin
+	if !mock.called {
+		t.Error("Expected next plugin to be called for unknown hostname")
+	}
+}
+
+// TestReverseToIP_IPv4 tests IPv4 reverse DNS conversion
+func TestReverseToIP_IPv4(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"Valid IPv4", "10.1.168.192.in-addr.arpa", "192.168.1.10"},
+		{"Valid IPv4 with dot", "10.1.168.192.in-addr.arpa.", "192.168.1.10"},
+		{"Invalid format", "10.1.168.in-addr.arpa", ""},
+		{"Not in-addr.arpa", "10.1.168.192.example.com", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := reverseToIP(tt.input)
+			if tt.expected == "" {
+				if result != nil {
+					t.Errorf("Expected nil, got %v", result)
+				}
+			} else {
+				expected := net.ParseIP(tt.expected)
+				if result == nil {
+					t.Errorf("Expected %v, got nil", expected)
+				} else if !result.Equal(expected) {
+					t.Errorf("Expected %v, got %v", expected, result)
+				}
+			}
+		})
+	}
+}
+
+// TestReverseToIP_IPv6 tests IPv6 reverse DNS conversion
+func TestReverseToIP_IPv6(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			"Valid IPv6",
+			"0.1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa",
+			"2001:db8::10",
+		},
+		{
+			"Valid IPv6 with dot",
+			"0.1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa.",
+			"2001:db8::10",
+		},
+		{
+			"Full IPv6",
+			"1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa",
+			"2001:db8::1",
+		},
+		{
+			"Invalid format - too few nibbles",
+			"0.1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa",
+			"",
+		},
+		{
+			"Not ip6.arpa",
+			"0.1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.example.com",
+			"",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := reverseToIP(tt.input)
+			if tt.expected == "" {
+				if result != nil {
+					t.Errorf("Expected nil, got %v", result)
+				}
+			} else {
+				expected := net.ParseIP(tt.expected)
+				if result == nil {
+					t.Errorf("Expected %v, got nil", expected)
+				} else if !result.Equal(expected) {
+					t.Errorf("Expected %v, got %v", expected, result)
+				}
+			}
+		})
+	}
+}
+
+// TestLookupA_OnlyReturnsIPv4 tests that lookupA only returns IPv4 addresses
+func TestLookupA_OnlyReturnsIPv4(t *testing.T) {
+	p := createTestPluginWithIPv6()
+
+	// Should return IPv4 for dual-stack node
+	ip := p.lookupA("nid0001.cluster.local")
+	if ip == nil {
+		t.Fatal("Expected IPv4 address, got nil")
+	}
+	if ip.To4() == nil {
+		t.Error("Expected IPv4 address, got IPv6")
+	}
+	expectedIPv4 := net.ParseIP("192.168.1.10")
+	if !ip.Equal(expectedIPv4) {
+		t.Errorf("Expected %v, got %v", expectedIPv4, ip)
+	}
+
+	// Should return nil for IPv6-only node
+	ipv6Only := p.lookupA("nid0002.cluster.local")
+	if ipv6Only != nil {
+		t.Errorf("Expected nil for IPv6-only node, got %v", ipv6Only)
+	}
+}
+
+// TestLookupAAAA_OnlyReturnsIPv6 tests that lookupAAAA only returns IPv6 addresses
+func TestLookupAAAA_OnlyReturnsIPv6(t *testing.T) {
+	p := createTestPluginWithIPv6()
+
+	// Should return IPv6 for dual-stack node
+	ip := p.lookupAAAA("nid0001.cluster.local")
+	if ip == nil {
+		t.Fatal("Expected IPv6 address, got nil")
+	}
+	if ip.To4() != nil {
+		t.Error("Expected IPv6 address, got IPv4")
+	}
+	expectedIPv6 := net.ParseIP("2001:db8::10")
+	if !ip.Equal(expectedIPv6) {
+		t.Errorf("Expected %v, got %v", expectedIPv6, ip)
+	}
+
+	// Should return IPv6 for IPv6-only node
+	ipv6Only := p.lookupAAAA("nid0002.cluster.local")
+	if ipv6Only == nil {
+		t.Fatal("Expected IPv6 address, got nil")
+	}
+	expectedIPv6Only := net.ParseIP("2001:db8::20")
+	if !ipv6Only.Equal(expectedIPv6Only) {
+		t.Errorf("Expected %v, got %v", expectedIPv6Only, ipv6Only)
+	}
+}
+
+// Mock response writer that fails on WriteMsg
+type failingResponseWriter struct {
+	mockResponseWriter
+	shouldFail bool
+}
+
+func (m *failingResponseWriter) WriteMsg(msg *dns.Msg) error {
+	if m.shouldFail {
+		return fmt.Errorf("simulated write failure")
+	}
+	m.msg = msg
+	return nil
+}
+
+// TestServeDNS_WriteMsg_Failure tests proper error handling when WriteMsg fails
+func TestServeDNS_WriteMsg_Failure(t *testing.T) {
+	p := createTestPlugin()
+	mock := &mockHandler{}
+	p.Next = mock
+
+	req := new(dns.Msg)
+	req.SetQuestion("nid0001.cluster.local.", dns.TypeA)
+
+	w := &failingResponseWriter{shouldFail: true}
+
+	rcode, err := p.ServeDNS(context.Background(), w, req)
+
+	// Should return SERVFAIL when write fails
+	if rcode != dns.RcodeServerFailure {
+		t.Errorf("Expected rcode %d (SERVFAIL), got %d", dns.RcodeServerFailure, rcode)
+	}
+
+	// Should return the error
+	if err == nil {
+		t.Error("Expected error to be returned when WriteMsg fails")
+	}
+
+	// Should not call next plugin
+	if mock.called {
+		t.Error("Expected next plugin not to be called when write fails")
 	}
 }
