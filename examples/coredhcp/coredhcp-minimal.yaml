@@ -1,24 +1,56 @@
 # Minimal CoreDHCP configuration with CoreSMD plugin
-# This configuration provides DHCP services for OpenCHAMI cluster components
+# This configuration provides both DHCPv4 and DHCPv6 services for OpenCHAMI
+# cluster components (dual-stack configuration)
+
+###############################################################################
+# DHCPv4 Configuration
+###############################################################################
 
 # Server configuration
 server4:
   # Listen on all interfaces, port 67
-  - address: 0.0.0.0:67
-  # Listen on specific interface (uncomment and modify as needed)
-  # - address: 192.168.1.1:67
+  listen:
+    - "0.0.0.0:67"
 
-# DHCPv4 plugins
-plugins4:
-  # CoreSMD plugin for dynamic IP assignment
-  - coresmd: |
-      svc_base_uri=http://smd.cluster.local
-      ipxe_base_uri=http://192.168.1.1
-      cache_valid=30s
-      lease_time=24h
-      single_port=false
+  plugins:
+    # Server identity
+    - server_id: 192.168.1.1
 
-# Logging configuration
-log:
-  level: info
-  format: text
+    # DNS servers
+    - dns: 1.1.1.1 8.8.8.8
+
+    # Gateway
+    - router: 192.168.1.1
+
+    # Network mask
+    - netmask: 255.255.255.0
+
+    # CoreSMD plugin for dynamic IP assignment
+    - coresmd: |
+        svc_base_uri=http://smd.cluster.local
+        ipxe_base_uri=http://192.168.1.1:8081
+        cache_valid=30s
+        lease_time=24h
+
+###############################################################################
+# DHCPv6 Configuration
+###############################################################################
+
+server6:
+  # Listen on all IPv6-capable interfaces
+  listen:
+    - "[::]:547"
+
+  plugins:
+    # Server identity using link-layer DUID
+    - server_id: LL 00:11:22:33:44:55
+
+    # IPv6 DNS servers
+    - dns: fd00::1 2001:4860:4860::8888
+
+    # CoreSMD plugin for dynamic IPv6 assignment
+    - coresmd: |
+        svc_base_uri=http://smd.cluster.local
+        ipxe_base_uri=http://[fd00::1]:8081
+        cache_valid=30s
+        lease_time=24h

@@ -4,9 +4,9 @@ The CoreSMD CoreDNS plugin provides dynamic DNS resolution for OpenCHAMI cluster
 
 ## Features
 
-- **Dynamic DNS Records**: Automatic A, PTR, and CNAME record generation
+- **Dynamic DNS Records**: Automatic A, AAAA, PTR, and CNAME record generation for both IPv4 and IPv6
 - **SMD Integration**: Real-time data from State Management Database
-- **Multiple Record Types**: Support for forward and reverse DNS lookups
+- **Multiple Record Types**: Support for forward and reverse DNS lookups (IPv4 and IPv6)
 - **Prometheus Metrics**: Built-in monitoring and metrics collection
 - **Readiness Reporting**: Health checks and readiness endpoints
 - **Cache Integration**: Shared cache with CoreDHCP plugins
@@ -70,7 +70,7 @@ Each zone block supports the following options:
 
 ## DNS Record Types
 
-### A Records
+### A Records (IPv4)
 
 Forward DNS resolution for nodes and BMCs:
 
@@ -79,13 +79,26 @@ nid0001.cluster.local.    IN A    192.168.1.10
 x3000c1s1b1.cluster.local. IN A    192.168.1.100
 ```
 
-### PTR Records
+### AAAA Records (IPv6)
 
-Reverse DNS resolution:
+IPv6 forward DNS resolution for nodes and BMCs:
 
 ```
+nid0001.cluster.local.    IN AAAA  fd00:100::10
+x3000c1s1b1.cluster.local. IN AAAA  fd00:100::100
+```
+
+### PTR Records (IPv4 and IPv6)
+
+Reverse DNS resolution for both IPv4 and IPv6:
+
+```
+# IPv4 reverse lookups
 10.1.168.192.in-addr.arpa. IN PTR nid0001.cluster.local.
 100.1.168.192.in-addr.arpa. IN PTR x3000c1s1b1.cluster.local.
+
+# IPv6 reverse lookups
+0.1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.0.0.0.d.f.ip6.arpa. IN PTR nid0001.cluster.local.
 ```
 
 ### CNAME Records

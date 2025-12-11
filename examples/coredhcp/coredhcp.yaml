@@ -1,4 +1,10 @@
 ---
+###############################################################################
+#
+# DHCPv4 CONFIGURATION
+#
+###############################################################################
+
 server4:
   plugins:
     ############################################################################
@@ -218,3 +224,79 @@ server4:
         lease_time=5m
         ipv4_start=172.16.0.156
         ipv4_end=172.16.0.200
+
+###############################################################################
+#
+# DHCPv6 CONFIGURATION
+#
+###############################################################################
+
+server6:
+  # Listen on all IPv6-capable interfaces. Alternatively, specify a particular
+  # IPv6 address or interface name.
+  listen:
+    - "[::]"
+
+  plugins:
+    ############################################################################
+    #
+    # NORMAL COREDHCP DHCPv6 PLUGIN CONFIGURATION
+    #
+    ############################################################################
+
+    # REQUIRED: server_id configures the identity of the DHCPv6 server using
+    # a DUID (DHCP Unique Identifier). Common formats:
+    #   - LL (Link-Layer): Uses MAC address, e.g., "LL 00:de:ad:be:ef:00"
+    #   - LLT (Link-Layer + Time): Includes timestamp
+    #   - EN (Enterprise Number): For organization-specific identifiers
+    - server_id: LL 00:de:ad:be:ef:00
+
+    # OPTIONAL: dns provides a list of IPv6 DNS servers to use for name
+    # resolution. These should be valid IPv6 addresses.
+    - dns: fd00:100::254 2001:4860:4860::8888
+
+    ############################################################################
+    #
+    # CORESMD DHCPv6 CONFIGURATION
+    #
+    ############################################################################
+
+    # REQUIRED: coresmd communicates with SMD and tries to match any MAC it
+    # receives to EthernetInterfaces in SMD. If one is found, the corresponding
+    # IPv6 address is leased to the requesting machine and packet processing
+    # terminates here.
+    #
+    # The configuration format and options are identical to DHCPv4 (see above).
+    # The key difference is that DHCPv6 will automatically select IPv6 addresses
+    # from the IPAddresses field in SMD's EthernetInterfaces.
+    #
+    # DHCPv6-SPECIFIC NOTES:
+    #
+    # - IPv6 addresses must be present in SMD for the EthernetInterfaces
+    # - FQDN options (via domain= configuration) work with DHCPv6
+    # - Boot file URLs should use IPv6 addresses in bracket notation:
+    #   tftp://[fd00:100::254]:69/ipxe.efi
+    # - The ipxe_base_uri should include IPv6 addresses in bracket notation if
+    #   using IP addresses directly: http://[fd00:100::254]:8081
+    #
+    # All configuration keys from DHCPv4 apply:
+    # - svc_base_uri, ipxe_base_uri, ca_cert
+    # - cache_valid, lease_time
+    # - single_port, tftp_dir, tftp_port
+    # - node_pattern, bmc_pattern, domain
+    - coresmd: |
+        svc_base_uri=https://foobar.openchami.cluster
+        ipxe_base_uri=http://[fd00:100::254]:8081
+        ca_cert=/root_ca/root_ca.crt
+        cache_valid=30s
+        lease_time=1h
+        single_port=false
+        tftp_dir=/tftpboot
+        tftp_port=69
+        node_pattern=nid{04d}
+        bmc_pattern=bmc{04d}
+        domain=openchami.cluster
+
+    # NOTE: The bootloop plugin currently only supports DHCPv4 and is not
+    # available for DHCPv6. For DHCPv6, consider using other mechanisms for
+    # handling unknown devices or rely on SMD having complete inventory.
