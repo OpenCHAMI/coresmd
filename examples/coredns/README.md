@@ -94,11 +94,17 @@ coresmd {
 ### Test DNS Resolution
 
 ```bash
-# Test A record lookup
-dig @localhost nid0001.cluster.local
+# Test A record lookup (IPv4)
+dig @localhost nid0001.cluster.local A
 
-# Test PTR record lookup
+# Test AAAA record lookup (IPv6)
+dig @localhost nid0001.cluster.local AAAA
+
+# Test PTR record lookup (IPv4)
 dig @localhost -x 192.168.1.10
+
+# Test PTR record lookup (IPv6)
+dig @localhost -x fd00:100::10
 
 # Test TXT record lookup
 dig @localhost TXT nid0001.cluster.local

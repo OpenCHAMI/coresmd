@@ -35,15 +35,15 @@ CoreSMD provides plugins for both [CoreDHCP](https://github.com/coredhcp/coredhc
 
 ### CoreDHCP
 
-CoreSMD provides two plugins. The first plugin, **coresmd**, uses SMD as a source of truth to provide DHCP leases. The second plugin, **bootloop**, dynamically assigns temporary IP addresses to unknown MACs until they can be updated in SMD.
+CoreSMD provides two plugins. The first plugin, **coresmd**, uses SMD as a source of truth to provide DHCP leases for both DHCPv4 and DHCPv6. The second plugin, **bootloop**, dynamically assigns temporary IP addresses to unknown MACs until they can be updated in SMD.
 
 This repository is part of the [OpenCHAMI](https://openchami.org) project. It extends CoreDHCP by integrating it with the SMD service so DHCP leases can be centrally managed. There are two primary plugins:
 
 1. **coresmd**
-   Provides DHCP leases based on data from SMD.
+   Provides DHCP leases (IPv4 and IPv6) based on data from SMD.
 
 2. **bootloop**
-   Assigns temporary IP addresses to unknown nodes. It also returns a DHCPNAK if it sees a node that has become known to SMD since its last lease, forcing a full DHCP handshake to get a new address (from **coresmd**).
+   Assigns temporary IPv4 addresses to unknown nodes. It also returns a DHCPNAK if it sees a node that has become known to SMD since its last lease, forcing a full DHCP handshake to get a new address (from **coresmd**).
 
 The goal of **bootloop** is to ensure unknown nodes/BMCs continually attempt to get new IP addresses if they become known in SMD, while still having a short, discoverable address for tasks like [Magellan](https://github.com/OpenCHAMI/magellan).
 
@@ -51,7 +51,7 @@ See [**examples/coredhcp/**](https://github.com/OpenCHAMI/coresmd/tree/main/exam
 
 ### CoreDNS
 
-The **coresmd** plugin allows hostnames/FQDNs for nodes and BMCs stored in SMD to be resolved to IP addresses.
+The **coresmd** plugin allows hostnames/FQDNs for nodes and BMCs stored in SMD to be resolved to IP addresses (both IPv4 and IPv6). It supports A, AAAA, and PTR record lookups.
 
 See [**examples/coredns/**](https://github.com/OpenCHAMI/coresmd/tree/main/examples/coredns) for configuration examples.
 

@@ -1,7 +1,6 @@
 package coresmd
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -13,6 +12,8 @@ import (
 	"github.com/coredhcp/coredhcp/logger"
 	"github.com/coredhcp/coredhcp/plugins"
 	"github.com/insomniacslk/dhcp/dhcpv4"
+	"github.com/insomniacslk/dhcp/dhcpv6"
+	"github.com/insomniacslk/dhcp/rfc1035label"
 
 	"github.com/openchami/coresmd/internal/debug"
 	"github.com/openchami/coresmd/internal/hostname"
@@ -86,7 +87,55 @@ func logVersion() {
 }
 
 func setup6(args ...string) (handler.Handler6, error) {
-	return nil, errors.New("coresmd does not currently support DHCPv6")
+	logVersion()
+
+	// Parse config from config file
+	cfg, errs := parseConfig(args...)
+	for _, err := range errs {
+		log.Error(err)
+	}
+
+	// Validate parsed config
+	warns, errs := cfg.validate()
+	for _, warning := range warns {
+		log.Warn(warning)
+	}
+	if len(errs) > 0 {
+		for _, err := range errs {
+			log.Error(err)
+		}
+		return nil, fmt.Errorf("%d fatal errors occurred, exiting", len(errs))
+	}
+
+	// Set parsed config as global to be accessed by other functions
+	globalConfig = cfg
+
+	// Create client to talk to SMD and set validating CA cert
+	smdClient := NewSmdClient(cfg.svcBaseURI)
+	if err := smdClient.UseCACert(cfg.caCert); err != nil {
+		return nil, fmt.Errorf("failed to set CA certificate: %w", err)
+	}
+
+	// Create cache and start fetching
+	var err error
+	if cache, err = NewCache(cfg.cacheValid.String(), smdClient); err != nil {
+		return nil, fmt.Errorf("failed to create new cache: %w", err)
+	}
+	cache.RefreshLoop()
+
+	// Start tftp server
+	log.Infof("starting TFTP server on port %d with directory %s", cfg.tftpPort, cfg.tftpDir)
+	server := &tftpServer{
+		directory:  cfg.tftpDir,
+		port:       cfg.tftpPort,
+		singlePort: cfg.singlePort,
+	}
+
+	go server.Start()
+
+	log.Infof("coresmd plugin initialized with %s", cfg)
+
+	return Handler6, nil
 }
 
 func setup4(args ...string) (handler.Handler4, error) {
@@ -396,4 +445,131 @@ func lookupMAC(mac string) (IfaceInfo, error) {
 	ii.IPList = ipList
 
 	return ii, nil
+}
+
+func Handler6(req, resp dhcpv6.DHCPv6) (dhcpv6.DHCPv6, bool) {
+	log.Debugf("DHCPv6 HANDLER CALLED ON MESSAGE TYPE: req(%s), resp(%s)", req.Type(), resp.Type())
+
+	// Make sure cache doesn't get updated while reading
+	(*cache).Mutex.RLock()
+	defer cache.Mutex.RUnlock()
+
+	// Extract MAC address from DHCPv6 message
+	hwAddr, err := dhcpv6.ExtractMAC(req)
+	if err != nil {
+		log.Errorf("Failed to extract MAC address from DHCPv6 request: %v", err)
+		return resp, false
+	}
+
+	// STEP 1: Lookup interface info and assign IPv6 address
+	macStr := hwAddr.String()
+	ifaceInfo, err := lookupMAC(macStr)
+	if err != nil {
+		log.Errorf("IP lookup failed: %v", err)
+		return resp, false
+	}
+
+	// Find an IPv6 address from the IP list
+	var assignedIPv6 net.IP
+	for _, ip := range ifaceInfo.IPList {
+		if ip.To4() == nil && ip.To16() != nil {
+			// This is an IPv6 address
+			assignedIPv6 = ip
+			break
+		}
+	}
+
+	if assignedIPv6 == nil {
+		log.Errorf("No IPv6 address found for MAC %s", macStr)
+		return resp, false
+	}
+
+	// Get the message and modify it
+	msg, ok := resp.(*dhcpv6.Message)
+	if !ok {
+		log.Errorf("Response is not a DHCPv6 message")
+		return resp, false
+	}
+
+	// Set client hostname
+	hname := "(none)"
+	if ifaceInfo.Type == "Node" {
+		nodeHostname := hostname.ExpandHostnamePattern(globalConfig.nodePattern, ifaceInfo.CompNID, ifaceInfo.CompID)
+		if globalConfig.domain != "" {
+			nodeHostname = nodeHostname + "." + globalConfig.domain
+		}
+		hname = nodeHostname
+		labels := &rfc1035label.Labels{Labels: strings.Split(nodeHostname, ".")}
+		msg.UpdateOption(&dhcpv6.OptFQDN{Flags: 0, DomainName: labels})
+		log.Debugf("setting hostname for node %s to %s", ifaceInfo.CompID, nodeHostname)
+	} else if ifaceInfo.Type == "NodeBMC" {
+		bmcHostname := hostname.ExpandHostnamePattern(globalConfig.bmcPattern, ifaceInfo.CompNID, ifaceInfo.CompID)
+		if globalConfig.domain != "" {
+			bmcHostname = bmcHostname + "." + globalConfig.domain
+		}
+		hname = bmcHostname
+		labels := &rfc1035label.Labels{Labels: strings.Split(bmcHostname, ".")}
+		msg.UpdateOption(&dhcpv6.OptFQDN{Flags: 0, DomainName: labels})
+		log.Debugf("setting hostname for BMC %s to %s", ifaceInfo.CompID, bmcHostname)
+	}
+
+	// Add IANA (Identity Association for Non-temporary Addresses) with the IPv6 address
+	reqMsg, ok := req.(*dhcpv6.Message)
+	if ok {
+		// Get IAID from request if present
+		if iana := reqMsg.Options.OneIANA(); iana != nil {
+			// Create IANA with the assigned address
+			ianaOpt := &dhcpv6.OptIANA{
+				IaId: iana.IaId,
+				T1:   time.Duration(globalConfig.leaseTime.Seconds()/2) * time.Second,
+				T2:   time.Duration(globalConfig.leaseTime.Seconds()*3/4) * time.Second,
+				Options: dhcpv6.IdentityOptions{
+					Options: []dhcpv6.Option{
+						&dhcpv6.OptIAAddress{
+							IPv6Addr:          assignedIPv6,
+							PreferredLifetime: *globalConfig.leaseTime,
+							ValidLifetime:     *globalConfig.leaseTime,
+						},
+					},
+				},
+			}
+			msg.UpdateOption(ianaOpt)
+		}
+	}
+
+	// Log assignment
+	log.Infof("assigning IPv6 %s and hostname %s to %s (%s) with a lease duration of %s", assignedIPv6, hname, ifaceInfo.MAC, ifaceInfo.Type, globalConfig.leaseTime)
+
+	// STEP 2: Send boot config for iPXE
+	if reqMsg, ok := req.(*dhcpv6.Message); ok {
+		if uc := reqMsg.GetOneOption(dhcpv6.OptionUserClass); uc != nil {
+			if userClass, ok := uc.(*dhcpv6.OptUserClass); ok {
+				// Check if this is iPXE
+				isPXE := false
+				for _, data := range userClass.UserClasses {
+					if string(data) == "iPXE" {
+						isPXE = true
+						break
+					}
+				}
+
+				if isPXE {
+					// BOOT STAGE 2: Send URL to BSS boot script
+					bssURL := globalConfig.ipxeBaseURI.JoinPath("/boot/v1/bootscript")
+					bssURL.RawQuery = fmt.Sprintf("mac=%s", macStr)
+					msg.UpdateOption(dhcpv6.OptBootFileURL(bssURL.String()))
+				} else {
+					// BOOT STAGE 1: Send iPXE bootloader URL
+					// For DHCPv6, we need to provide the bootfile URL
+					// Get server ID from response message
+					if serverID := msg.GetOneOption(dhcpv6.OptionServerID); serverID != nil {
+						tftpURL := fmt.Sprintf("tftp://[%s]:%d/ipxe.efi", serverID, globalConfig.tftpPort)
+						msg.UpdateOption(dhcpv6.OptBootFileURL(tftpURL))
+					}
+				}
+			}
+		}
+	}
+
+	return msg, true
 }

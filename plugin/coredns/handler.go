@@ -226,7 +226,7 @@ func (p *Plugin) lookupAAAA(name string) net.IP {
 
 					if name == nidFQDN || name == xnameFQDN {
 						for _, ipEntry := range ei.IPAddresses {
-							if ip := net.ParseIP(ipEntry.IPAddress); ip != nil && ip.To4() == nil {
+							if ip := net.ParseIP(ipEntry.IPAddress); ip != nil && ip.To4() == nil && ip.To16() != nil {
 								return ip
 							}
 						}
@@ -241,7 +241,7 @@ func (p *Plugin) lookupAAAA(name string) net.IP {
 					xnameFQDN := xnameHost + "." + zone.Name
 					if name == xnameFQDN {
 						for _, ipEntry := range ei.IPAddresses {
-							if ip := net.ParseIP(ipEntry.IPAddress); ip != nil && ip.To4() == nil {
+							if ip := net.ParseIP(ipEntry.IPAddress); ip != nil && ip.To4() == nil && ip.To16() != nil {
 								return ip
 							}
 						}
