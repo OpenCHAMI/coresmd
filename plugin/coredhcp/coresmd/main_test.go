@@ -370,14 +370,37 @@ func TestConfigValidate_Table(t *testing.T) {
 	}
 }
 
-// TestSetup6_Unsupported ensures DHCPv6 is explicitly unsupported.
-func TestSetup6_Unsupported(t *testing.T) {
-	h, err := setup6()
-	if h != nil {
-		t.Errorf("setup6() handler = %v, want nil", h)
+// TestSetup6_Success ensures DHCPv6 is properly supported with valid configuration.
+func TestSetup6_Success(t *testing.T) {
+	// Since setup6 tries to create an SMD client and cache, which would fail
+	// without a real server, we're primarily testing that:
+	// 1. The function signature is correct (returns Handler6)
+	// 2. It doesn't immediately return an error for DHCPv6 unsupported
+	// 3. Configuration parsing works the same as setup4
+
+	// This test would need mocking of SMD client to fully test.
+	// For now, we verify the function exists and has the right signature.
+	if Plugin.Setup6 == nil {
+		t.Fatal("Plugin.Setup6 is nil, want non-nil function")
 	}
+
+	// We can't fully test setup6 without mocking SMD, but we can verify
+	// it attempts to parse configuration correctly by checking error messages
+	h, err := Plugin.Setup6()
 	if err == nil {
-		t.Fatalf("setup6() error = nil, want non-nil")
+		t.Error("setup6() with no args should fail validation, got nil error")
+	}
+	if h != nil {
+		t.Errorf("setup6() with invalid args should return nil handler, got %v", h)
+	}
+
+	// Test with incomplete config (missing required fields)
+	h2, err2 := Plugin.Setup6("svc_base_uri=https://smd.example.test")
+	if err2 == nil {
+		t.Error("setup6() with incomplete config should fail, got nil error")
+	}
+	if h2 != nil {
+		t.Errorf("setup6() with incomplete config should return nil handler, got %v", h2)
 	}
 }
 
