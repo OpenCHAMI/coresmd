@@ -10,6 +10,7 @@ import (
 	_ "github.com/coredns/coredns/plugin/errors"
 	_ "github.com/coredns/coredns/plugin/file"
 	_ "github.com/coredns/coredns/plugin/forward"
+	_ "github.com/coredns/coredns/plugin/header"
 	_ "github.com/coredns/coredns/plugin/health"
 	_ "github.com/coredns/coredns/plugin/hosts"
 	_ "github.com/coredns/coredns/plugin/loadbalance"
@@ -39,6 +40,7 @@ var directives = []string{
 	"coresmd",
 	"k8s_gateway",
 	// Standard plugins (add/remove as needed)
+	"header",
 	"forward",
 	"cache",
 	"reload",
