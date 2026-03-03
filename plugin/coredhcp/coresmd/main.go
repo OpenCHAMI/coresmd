@@ -42,6 +42,7 @@ type Config struct {
 	bmcPattern  string         // bmc_pattern
 	nodePattern string         // node_pattern
 	domain      string         // domain
+	policy      hostname.Policy
 }
 
 func (c Config) String() string {
@@ -279,6 +280,20 @@ func parseConfig(argv ...string) (cfg Config, errs []error) {
 			if domain != "" {
 				cfg.domain = domain
 			}
+		case "hostname_default":
+			hostnameDefault := strings.Trim(opt[1], `"'`)
+			if hostnameDefault != "" {
+				// Set the hostnameDefault to a pattern value
+				cfg.policy.DefaultPattern = hostnameDefault
+			}
+		case "hostname_by_type":
+			hostnameByType := strings.Trim(opt[1], `"'`)
+			if hostnameByType != "" {
+				// Separate ComponentType and pattern by delimiter
+				// componentType = vals[0], pattern = vals[1]
+				vals := strings.SplitN(arg, ":", 2)
+				cfg.policy.ByType[vals[0]] = vals[1]
+			}
 		default:
 			errs = append(errs, fmt.Errorf("arg %d: unknown config key '%s' (skipping)", idx, opt[0]))
 			continue
@@ -341,6 +356,12 @@ func (c *Config) validate() (warns []string, errs []error) {
 	if c.domain == "" {
 		warns = append(warns, "domain unset, not configuring")
 	}
+	if c.policy.DefaultPattern == "" {
+		warns = append(warns, "hostname_default unset, hostname patterns will not be used when no hostname_by_type is found")
+	}
+	if c.policy.ByType == nil {
+		warns = append(warns, "hostname_by_type(s) unset, hostnames will not be expanded using patterns")
+	}
 	return
 }
 
@@ -362,6 +383,10 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	assignedIP := ifaceInfo.IPList[0].To4()
 	resp.YourIPAddr = assignedIP
 
+	// Apply hostname policy customizations
+	if expandedHostname, ok := globalConfig.policy.HostnameFor(ifaceInfo.Type, ifaceInfo.CompNID, ifaceInfo.CompID); ok {
+		resp.Options.Update(dhcpv4.OptHostName(expandedHostname))
+	}
 	// Set lease time
 	if globalConfig.leaseTime == nil {
 		log.Errorf("lease time unset in global config! unable to set lease time in DHCPv4 response to %s", ifaceInfo.MAC)
