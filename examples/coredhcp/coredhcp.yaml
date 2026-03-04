@@ -141,6 +141,24 @@ server4:
     #   An optional domain to append to hostnames generated with node_pattern
     #   and bmc_pattern. If omitted, no domain will be appended. See CUSTOM
     #   DOMAINS above for details.
+    #
+    # hostname_by_type (OPTIONAL, string)
+    #   Policy customization to map component types with hostname patterns. If
+    #   the component type is found, the pattern will be used to generate
+    #   hostnames. Otherwise, the hostname_default value is used instead. See
+    #   CUSTOM HOSTNAMES for details.
+    #
+    #   Component types "Node" and "NodeBMC" are reserved for node_pattern and
+    #   bmc_pattern respectively and will replace the pattern specified with
+    #   hostname_by_type.
+    #
+    # hostname_default (OPTIONAL, string)
+    #   The default fallback hostname to use when a component type is not found.
+    #   See CUSTOM HOSTNAMES for details.
+    #
+    #   Component types "Node" and "NodeBMC" are reserved for node_pattern and
+    #   bmc_pattern respectively and will replace the pattern specified with
+    #   hostname_by_type.
     - coresmd: |
         svc_base_uri=https://foobar.openchami.cluster
         ipxe_base_uri=http://172.16.0.253:8081
