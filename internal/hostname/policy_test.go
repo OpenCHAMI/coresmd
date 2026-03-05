@@ -6,10 +6,17 @@ import (
 )
 
 func TestPolicyHostnameFor(t *testing.T) {
+	type call struct {
+		compType  string
+		nid       int64
+		id        string
+		want      string
+		nameFound bool
+	}
 	tests := []struct {
 		name   string
 		policy Policy
-		wants  []string
+		wants  []call
 	}{
 
 		{
@@ -22,9 +29,9 @@ func TestPolicyHostnameFor(t *testing.T) {
 				},
 			},
 			// expect the final expanded hostname
-			wants: []string{
-				"nid0001",
-				"s100",
+			wants: []call{
+				{compType: "Node", nid: 1, id: "", want: "nid0001", nameFound: true},
+				{compType: "HSNSwitch", nid: 100, id: "s100", want: "s100", nameFound: true},
 			},
 		},
 		{
@@ -35,8 +42,9 @@ func TestPolicyHostnameFor(t *testing.T) {
 					"HSNSwitch": "switch-{id}",
 				},
 			},
-			wants: []string{
-				"nid0001",
+			wants: []call{
+				{compType: "Node", nid: 1, id: "", want: "nid0001", nameFound: true},
+				{compType: "HSNSwitch", nid: 100, id: "s100", want: "switch-s100", nameFound: true},
 			},
 		},
 		{
@@ -45,22 +53,26 @@ func TestPolicyHostnameFor(t *testing.T) {
 				DefaultPattern: "",
 				ByType:         map[string]string{},
 			},
-			wants: []string{""},
+			wants: []call{
+				{compType: "Node", nid: 1, id: "", want: "", nameFound: false},
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			var results []string
-			results[0], _ = tt.policy.HostnameFor("Node", 1, "")
-			results[1], _ = tt.policy.HostnameFor("HSNSwitch", 100, "s100")
-
-			for i := range results {
-				if results[i] != tt.wants[i] {
-					t.Errorf("expected %s but got %s instead for result %d",
-						tt.wants[i], results[i], i)
-				}
+			for _, tc := range tt.wants {
+				tc := tc
+				t.Run(tc.compType, func(t *testing.T) {
+					got, nameFound := tt.policy.HostnameFor(tc.compType, tc.nid, tc.id)
+					if nameFound != tc.nameFound {
+						t.Fatalf("HostnameFor(%q, %d, %q): nameFound was %v, expected %v", tc.compType, tc.nid, tc.id, nameFound, tc.nameFound)
+					}
+					if got != tc.want {
+						t.Fatalf("HostnameFor(%q, %d, %q) = %q, want %q", tc.compType, tc.nid, tc.id, got, tc.want)
+					}
+				})
 			}
 		})
 	}
