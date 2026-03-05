@@ -46,7 +46,7 @@ type Config struct {
 }
 
 func (c Config) String() string {
-	return fmt.Sprintf("svc_base_uri=%s ipxe_base_uri=%s ca_cert=%s cache_valid=%s lease_time=%s single_port=%v tftp_dir=%s tftp_port=%d bmc_pattern=%s node_pattern=%s domain=%s",
+	cfgStr := fmt.Sprintf("svc_base_uri=%s ipxe_base_uri=%s ca_cert=%s cache_valid=%s lease_time=%s single_port=%v tftp_dir=%s tftp_port=%d bmc_pattern=%s node_pattern=%s domain=%s",
 		c.svcBaseURI,
 		c.ipxeBaseURI,
 		c.caCert,
@@ -59,6 +59,14 @@ func (c Config) String() string {
 		c.nodePattern,
 		c.domain,
 	)
+	cfgStr += fmt.Sprintf(" hostname_default=%s", c.policy.DefaultPattern)
+	if c.policy.ByType != nil {
+		for compType, pattern := range c.policy.ByType {
+			cfgStr += fmt.Sprintf(" hostname_by_type=%s:%s", compType, pattern)
+		}
+	}
+
+	return cfgStr
 }
 
 const (
@@ -292,6 +300,13 @@ func parseConfig(argv ...string) (cfg Config, errs []error) {
 				// Separate ComponentType and pattern by delimiter
 				// componentType = vals[0], pattern = vals[1]
 				vals := strings.SplitN(arg, ":", 2)
+				if len(vals) != 2 {
+					errs = append(errs, fmt.Errorf("arg %d: invalid format for key '%s': expected hostname_by_type=<type>:<pattern>, got %s", idx, opt[0], opt[1]))
+					continue
+				}
+				if cfg.policy.ByType == nil {
+					cfg.policy.ByType = make(map[string]string)
+				}
 				cfg.policy.ByType[vals[0]] = vals[1]
 			}
 		default:
