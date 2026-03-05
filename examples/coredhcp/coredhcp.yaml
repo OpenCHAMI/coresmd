@@ -65,6 +65,17 @@ server4:
     #   "node-{id}"     -> node-x3000c0s0b0n0
     #   "dev-s{02d}"    -> dev-s01, dev-s42
     #
+    # CUSTOM HOSTNAME COMPONENT TYPES
+    #
+    # MgmtSwitch
+    # Node
+    # NodeBMC
+    # RouterBMC
+    # VirtualNode
+    #
+    # A full list of the component types can be found in the SMD source code:
+    # https://github.com/OpenCHAMI/smd/blob/63e15b2c0675bfd64459d1d49f1ab03ac5717d87/pkg/schemas/csm/components.go#L31
+    #
     # CUSTOM DOMAINS:
     #
     # If 'domain' is specified (see CONFIGURATION KEYS below), a custom domain
@@ -148,17 +159,17 @@ server4:
     #   hostnames. Otherwise, the hostname_default value is used instead. See
     #   CUSTOM HOSTNAMES for details.
     #
-    #   Component types "Node" and "NodeBMC" are reserved for node_pattern and
-    #   bmc_pattern respectively and will replace the pattern specified with
-    #   hostname_by_type.
+    #   Component type "Node" and "NodeBMC" are reserved for node_pattern and
+    #   bmc_pattern, respectively. Values set for node_pattern and bmc_pattern will
+    #   override values set for Node and NodeBMC if set for hostname_by_type.
     #
     # hostname_default (OPTIONAL, string)
     #   The default fallback hostname to use when a component type is not found.
     #   See CUSTOM HOSTNAMES for details.
     #
-    #   Component types "Node" and "NodeBMC" are reserved for node_pattern and
-    #   bmc_pattern respectively and will replace the pattern specified with
-    #   hostname_by_type.
+    #   Component type "Node" and "NodeBMC" are reserved for node_pattern and
+    #   bmc_pattern, respectively. Values set for node_pattern and bmc_pattern will
+    #   override values set for Node and NodeBMC if set for hostname_default.
     - coresmd: |
         svc_base_uri=https://foobar.openchami.cluster
         ipxe_base_uri=http://172.16.0.253:8081
@@ -171,6 +182,9 @@ server4:
         node_pattern=nid{04d}
         bmc_pattern=bmc{04d}
         domain=openchami.cluster
+        hostname_by_type=Node:nid{04d}
+        hostname_by_type=HSNSwitch:{id}
+        hostname_default=
 
     # Any requests reaching this point are unknown to SMD and it is up to the
     # administrator to decide how to handle unknown packets.
@@ -302,6 +316,7 @@ server6:
     # - cache_valid, lease_time
     # - single_port, tftp_dir, tftp_port
     # - node_pattern, bmc_pattern, domain
+    # - hostname_by_type, hostname_by_default
     - coresmd: |
         svc_base_uri=https://foobar.openchami.cluster
         ipxe_base_uri=http://[fd00:100::254]:8081
@@ -314,6 +329,9 @@ server6:
         node_pattern=nid{04d}
         bmc_pattern=bmc{04d}
         domain=openchami.cluster
+        hostname_by_type=Node:nid{04d}
+        hostname_by_type=HSNSwitch:{id}
+        hostname_default=
 
     # NOTE: The bootloop plugin currently only supports DHCPv4 and is not
     # available for DHCPv6. For DHCPv6, consider using other mechanisms for
