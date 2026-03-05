@@ -399,7 +399,9 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	resp.YourIPAddr = assignedIP
 
 	// Apply hostname policy customizations
+	hname := "(none)"
 	if expandedHostname, ok := globalConfig.policy.HostnameFor(ifaceInfo.Type, ifaceInfo.CompNID, ifaceInfo.CompID); ok {
+		hname = expandedHostname
 		resp.Options.Update(dhcpv4.OptHostName(expandedHostname))
 	}
 	// Set lease time
@@ -410,7 +412,6 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	}
 
 	// Set client hostname
-	hname := "(none)"
 	if ifaceInfo.Type == "Node" {
 		nodeHostname := hostname.ExpandHostnamePattern(globalConfig.nodePattern, ifaceInfo.CompNID, ifaceInfo.CompID)
 		if globalConfig.domain != "" {
