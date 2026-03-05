@@ -398,12 +398,6 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	assignedIP := ifaceInfo.IPList[0].To4()
 	resp.YourIPAddr = assignedIP
 
-	// Apply hostname policy customizations
-	hname := "(none)"
-	if expandedHostname, ok := globalConfig.policy.HostnameFor(ifaceInfo.Type, ifaceInfo.CompNID, ifaceInfo.CompID); ok {
-		hname = expandedHostname
-		resp.Options.Update(dhcpv4.OptHostName(expandedHostname))
-	}
 	// Set lease time
 	if globalConfig.leaseTime == nil {
 		log.Errorf("lease time unset in global config! unable to set lease time in DHCPv4 response to %s", ifaceInfo.MAC)
@@ -411,27 +405,33 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 		resp.Options.Update(dhcpv4.OptIPAddressLeaseTime(*globalConfig.leaseTime))
 	}
 
-	// Set client hostname
+	// Apply hostname policy customizations
+	hname := "(none)"
+	if expandedHostname, ok := globalConfig.policy.HostnameFor(ifaceInfo.Type, ifaceInfo.CompNID, ifaceInfo.CompID); ok {
+		hname = expandedHostname
+		resp.Options.Update(dhcpv4.OptHostName(expandedHostname))
+	}
+
+	// Allow node_pattern and bmc_pattern to overwrite hostname from policy
 	if ifaceInfo.Type == "Node" {
 		nodeHostname := hostname.ExpandHostnamePattern(globalConfig.nodePattern, ifaceInfo.CompNID, ifaceInfo.CompID)
 		if globalConfig.domain != "" {
 			nodeHostname = nodeHostname + "." + globalConfig.domain
 		}
 		hname = nodeHostname
-		resp.Options.Update(dhcpv4.OptHostName(nodeHostname))
-		log.Debugf("setting hostname for node %s to %s", ifaceInfo.CompID, nodeHostname)
+		log.Debugf("setting hostname for node %s to %s", ifaceInfo.CompID, hname)
 	} else if ifaceInfo.Type == "NodeBMC" {
 		bmcHostname := hostname.ExpandHostnamePattern(globalConfig.bmcPattern, ifaceInfo.CompNID, ifaceInfo.CompID)
 		if globalConfig.domain != "" {
 			bmcHostname = bmcHostname + "." + globalConfig.domain
 		}
 		hname = bmcHostname
-		resp.Options.Update(dhcpv4.OptHostName(bmcHostname))
-		log.Debugf("setting hostname for BMC %s to %s", ifaceInfo.CompID, bmcHostname)
+		log.Debugf("setting hostname for BMC %s to %s", ifaceInfo.CompID, hname)
 	}
 
 	// Log assignment
 	log.Infof("assigning IP %s and hostname %s to %s (%s) with a lease duration of %s", assignedIP, hname, ifaceInfo.MAC, ifaceInfo.Type, globalConfig.leaseTime)
+	resp.Options.Update(dhcpv4.OptHostName(hname))
 
 	// Set root path to this server's IP
 	resp.Options.Update(dhcpv4.OptRootPath(resp.ServerIPAddr.String()))
