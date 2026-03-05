@@ -299,7 +299,7 @@ func parseConfig(argv ...string) (cfg Config, errs []error) {
 			if hostnameByType != "" {
 				// Separate ComponentType and pattern by delimiter
 				// componentType = vals[0], pattern = vals[1]
-				vals := strings.SplitN(arg, ":", 2)
+				vals := strings.SplitN(opt[1], ":", 2)
 				if len(vals) != 2 {
 					errs = append(errs, fmt.Errorf("arg %d: invalid format for key '%s': expected hostname_by_type=<type>:<pattern>, got %s", idx, opt[0], opt[1]))
 					continue
