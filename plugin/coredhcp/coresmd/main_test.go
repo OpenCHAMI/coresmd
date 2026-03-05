@@ -241,7 +241,12 @@ func TestParseConfig_Table(t *testing.T) {
 				t.Fatalf("parseConfig() errors = %d, want at least %d; errs=%v", len(errs), tt.wantErrsMin, errs)
 			}
 
-			wantCfg := tt.wantCfg()
+			var wantCfg Config
+			if tt.wantCfg == nil {
+				wantCfg = Config{}
+			} else {
+				wantCfg = tt.wantCfg()
+			}
 
 			// Compare only the fields we care about for each test.
 			if wantCfg.svcBaseURI != nil {
