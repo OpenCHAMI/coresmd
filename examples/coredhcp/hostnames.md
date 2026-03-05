@@ -65,7 +65,7 @@ Uses the full component identifier from SMD:
     node_pattern="compute-{05d}"
     bmc_pattern="bmc-{05d}"
     domain=datacenter.com
-    hostname_by_type=Custom:{id}
+    hostname_by_type=Custom:custom-{id}
     hostname_default=
 ```
 
