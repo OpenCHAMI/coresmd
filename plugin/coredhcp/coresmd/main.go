@@ -31,18 +31,18 @@ type IfaceInfo struct {
 
 type Config struct {
 	// Parsed from configuration file
-	svcBaseURI  *url.URL       // svc_base_uri
-	ipxeBaseURI *url.URL       // ipxe_base_uri
-	caCert      string         // ca_cert
-	cacheValid  *time.Duration // cache_valid
-	leaseTime   *time.Duration // lease_time
-	singlePort  bool           // single_port
-	tftpDir     string         // tftp_dir
-	tftpPort    int            // tftp_port
-	bmcPattern  string         // bmc_pattern
-	nodePattern string         // node_pattern
-	domain      string         // domain
-	policy      hostname.Policy
+	svcBaseURI  *url.URL        // svc_base_uri
+	ipxeBaseURI *url.URL        // ipxe_base_uri
+	caCert      string          // ca_cert
+	cacheValid  *time.Duration  // cache_valid
+	leaseTime   *time.Duration  // lease_time
+	singlePort  bool            // single_port
+	tftpDir     string          // tftp_dir
+	tftpPort    int             // tftp_port
+	bmcPattern  string          // bmc_pattern
+	nodePattern string          // node_pattern
+	domain      string          // domain
+	policy      hostname.Policy // hostname_by_type, hostname_default
 }
 
 func (c Config) String() string {
