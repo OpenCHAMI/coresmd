@@ -31,21 +31,22 @@ type IfaceInfo struct {
 
 type Config struct {
 	// Parsed from configuration file
-	svcBaseURI  *url.URL       // svc_base_uri
-	ipxeBaseURI *url.URL       // ipxe_base_uri
-	caCert      string         // ca_cert
-	cacheValid  *time.Duration // cache_valid
-	leaseTime   *time.Duration // lease_time
-	singlePort  bool           // single_port
-	tftpDir     string         // tftp_dir
-	tftpPort    int            // tftp_port
-	bmcPattern  string         // bmc_pattern
-	nodePattern string         // node_pattern
-	domain      string         // domain
+	svcBaseURI  *url.URL        // svc_base_uri
+	ipxeBaseURI *url.URL        // ipxe_base_uri
+	caCert      string          // ca_cert
+	cacheValid  *time.Duration  // cache_valid
+	leaseTime   *time.Duration  // lease_time
+	singlePort  bool            // single_port
+	tftpDir     string          // tftp_dir
+	tftpPort    int             // tftp_port
+	bmcPattern  string          // bmc_pattern
+	nodePattern string          // node_pattern
+	domain      string          // domain
+	policy      hostname.Policy // hostname_by_type, hostname_default
 }
 
 func (c Config) String() string {
-	return fmt.Sprintf("svc_base_uri=%s ipxe_base_uri=%s ca_cert=%s cache_valid=%s lease_time=%s single_port=%v tftp_dir=%s tftp_port=%d bmc_pattern=%s node_pattern=%s domain=%s",
+	cfgStr := fmt.Sprintf("svc_base_uri=%s ipxe_base_uri=%s ca_cert=%s cache_valid=%s lease_time=%s single_port=%v tftp_dir=%s tftp_port=%d bmc_pattern=%s node_pattern=%s domain=%s",
 		c.svcBaseURI,
 		c.ipxeBaseURI,
 		c.caCert,
@@ -58,6 +59,14 @@ func (c Config) String() string {
 		c.nodePattern,
 		c.domain,
 	)
+	cfgStr += fmt.Sprintf(" hostname_default=%s", c.policy.DefaultPattern)
+	if c.policy.ByType != nil {
+		for compType, pattern := range c.policy.ByType {
+			cfgStr += fmt.Sprintf(" hostname_by_type=%s:%s", compType, pattern)
+		}
+	}
+
+	return cfgStr
 }
 
 const (
@@ -279,6 +288,27 @@ func parseConfig(argv ...string) (cfg Config, errs []error) {
 			if domain != "" {
 				cfg.domain = domain
 			}
+		case "hostname_default":
+			hostnameDefault := strings.Trim(opt[1], `"'`)
+			if hostnameDefault != "" {
+				// Set the hostnameDefault to a pattern value
+				cfg.policy.DefaultPattern = hostnameDefault
+			}
+		case "hostname_by_type":
+			hostnameByType := strings.Trim(opt[1], `"'`)
+			if hostnameByType != "" {
+				// Separate ComponentType and pattern by delimiter
+				// componentType = vals[0], pattern = vals[1]
+				vals := strings.SplitN(opt[1], ":", 2)
+				if len(vals) != 2 {
+					errs = append(errs, fmt.Errorf("arg %d: invalid format for key '%s': expected hostname_by_type=<type>:<pattern>, got %s", idx, opt[0], opt[1]))
+					continue
+				}
+				if cfg.policy.ByType == nil {
+					cfg.policy.ByType = make(map[string]string)
+				}
+				cfg.policy.ByType[vals[0]] = vals[1]
+			}
 		default:
 			errs = append(errs, fmt.Errorf("arg %d: unknown config key '%s' (skipping)", idx, opt[0]))
 			continue
@@ -341,6 +371,12 @@ func (c *Config) validate() (warns []string, errs []error) {
 	if c.domain == "" {
 		warns = append(warns, "domain unset, not configuring")
 	}
+	if c.policy.DefaultPattern == "" {
+		warns = append(warns, "hostname_default unset, hostname patterns will not be used when no hostname_by_type is found")
+	}
+	if c.policy.ByType == nil {
+		warns = append(warns, "hostname_by_type(s) unset, hostnames will not be expanded using patterns")
+	}
 	return
 }
 
@@ -369,28 +405,33 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 		resp.Options.Update(dhcpv4.OptIPAddressLeaseTime(*globalConfig.leaseTime))
 	}
 
-	// Set client hostname
+	// Apply hostname policy customizations
 	hname := "(none)"
+	if expandedHostname, ok := globalConfig.policy.HostnameFor(ifaceInfo.Type, ifaceInfo.CompNID, ifaceInfo.CompID); ok {
+		hname = expandedHostname
+		resp.Options.Update(dhcpv4.OptHostName(expandedHostname))
+	}
+
+	// Allow node_pattern and bmc_pattern to overwrite hostname from policy
 	if ifaceInfo.Type == "Node" {
 		nodeHostname := hostname.ExpandHostnamePattern(globalConfig.nodePattern, ifaceInfo.CompNID, ifaceInfo.CompID)
 		if globalConfig.domain != "" {
 			nodeHostname = nodeHostname + "." + globalConfig.domain
 		}
 		hname = nodeHostname
-		resp.Options.Update(dhcpv4.OptHostName(nodeHostname))
-		log.Debugf("setting hostname for node %s to %s", ifaceInfo.CompID, nodeHostname)
+		log.Debugf("setting hostname for node %s to %s", ifaceInfo.CompID, hname)
 	} else if ifaceInfo.Type == "NodeBMC" {
 		bmcHostname := hostname.ExpandHostnamePattern(globalConfig.bmcPattern, ifaceInfo.CompNID, ifaceInfo.CompID)
 		if globalConfig.domain != "" {
 			bmcHostname = bmcHostname + "." + globalConfig.domain
 		}
 		hname = bmcHostname
-		resp.Options.Update(dhcpv4.OptHostName(bmcHostname))
-		log.Debugf("setting hostname for BMC %s to %s", ifaceInfo.CompID, bmcHostname)
+		log.Debugf("setting hostname for BMC %s to %s", ifaceInfo.CompID, hname)
 	}
 
 	// Log assignment
 	log.Infof("assigning IP %s and hostname %s to %s (%s) with a lease duration of %s", assignedIP, hname, ifaceInfo.MAC, ifaceInfo.Type, globalConfig.leaseTime)
+	resp.Options.Update(dhcpv4.OptHostName(hname))
 
 	// Set root path to this server's IP
 	resp.Options.Update(dhcpv4.OptRootPath(resp.ServerIPAddr.String()))

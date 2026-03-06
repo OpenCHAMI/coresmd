@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/openchami/coresmd/internal/hostname"
 )
 
 // TestConfigString ensures String() includes the key fields in a stable format.
@@ -26,6 +28,13 @@ func TestConfigString(t *testing.T) {
 		bmcPattern:  "bmc{04d}",
 		nodePattern: "nid{04d}",
 		domain:      "example.test",
+		policy: hostname.Policy{
+			DefaultPattern: "",
+			ByType: map[string]string{
+				"Node":      "nid{04d}",
+				"HSNSwitch": "{id}",
+			},
+		},
 	}
 
 	s := cfg.String()
@@ -43,6 +52,9 @@ func TestConfigString(t *testing.T) {
 		"bmc_pattern=bmc{04d}",
 		"node_pattern=nid{04d}",
 		"domain=example.test",
+		"hostname_by_type=Node:nid{04d}",
+		"hostname_by_type=HSNSwitch:{id}",
+		"hostname_default=",
 	}
 
 	for _, sub := range wantSubstrings {
@@ -77,6 +89,9 @@ func TestParseConfig_Table(t *testing.T) {
 				"bmc_pattern=bmc{03d}",
 				"node_pattern=nid{03d}",
 				"domain=cluster.local",
+				"hostname_by_type=Node:nid{04d}",
+				"hostname_by_type=HSNSwitch:{id}",
+				"hostname_default=",
 			},
 			wantCfg: func() Config {
 				svc, _ := url.Parse("https://svc.example.test")
@@ -93,6 +108,13 @@ func TestParseConfig_Table(t *testing.T) {
 					bmcPattern:  "bmc{03d}",
 					nodePattern: "nid{03d}",
 					domain:      "cluster.local",
+					policy: hostname.Policy{
+						DefaultPattern: "",
+						ByType: map[string]string{
+							"Node":      "nid{04d}",
+							"HSNSwitch": "{id}",
+						},
+					},
 				}
 			},
 			wantErrsMin: 0,
@@ -194,6 +216,22 @@ func TestParseConfig_Table(t *testing.T) {
 			},
 			wantErrsMin: 0,
 		},
+		{
+			name: "invalid hostname_by_type format cases",
+			args: []string{
+				"hostname_by_type=:nid{04d}",
+				"hostname_by_type=MyType::{id}",
+				"hostname_by_type=NoDelimiter",
+			},
+		},
+		//NOTE: should we test hostname_by_type=componentType: with no value?
+		// technically, this could be a valid case...
+		{
+			name: "valid non-zero hostname_default value",
+			args: []string{
+				"hostname_default=",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -203,7 +241,12 @@ func TestParseConfig_Table(t *testing.T) {
 				t.Fatalf("parseConfig() errors = %d, want at least %d; errs=%v", len(errs), tt.wantErrsMin, errs)
 			}
 
-			wantCfg := tt.wantCfg()
+			var wantCfg Config
+			if tt.wantCfg == nil {
+				wantCfg = Config{}
+			} else {
+				wantCfg = tt.wantCfg()
+			}
 
 			// Compare only the fields we care about for each test.
 			if wantCfg.svcBaseURI != nil {

@@ -40,6 +40,9 @@ Uses the full component identifier from SMD:
     ipxe_base_uri=http://192.168.1.1
     cache_valid=30s
     lease_time=24h
+    hostname_by_type=Node:nid{04d}
+    hostname_by_type=Custom:{id}
+    hostname_default=
 ```
 
 **Result:**
@@ -62,11 +65,14 @@ Uses the full component identifier from SMD:
     node_pattern="compute-{05d}"
     bmc_pattern="bmc-{05d}"
     domain=datacenter.com
+    hostname_by_type=Custom:custom-{id}
+    hostname_default=
 ```
 
 **Result:**
 - Nodes: `compute-00001.datacenter.com`, `compute-00042.datacenter.com`
 - BMCs: `bmc-00001.datacenter.com`, `bmc-00042.datacenter.com`
+- Custom: `custom-0001.datacenter.com`, `custom-0002.datacenter.com`
 
 **Use case:** Enterprise data center with descriptive hostnames and FQDN requirements
 
