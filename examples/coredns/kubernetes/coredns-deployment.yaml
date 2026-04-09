@@ -67,6 +67,7 @@ spec:
       - name: certs-volume
         secret:
           secretName: smd-certs
+
 ---
 apiVersion: v1
 kind: Service
@@ -88,4 +89,4 @@ spec:
   - name: metrics
     port: 9153
     protocol: TCP
-  type: ClusterIP 
+  type: ClusterIP

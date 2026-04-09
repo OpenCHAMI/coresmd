@@ -180,3 +180,89 @@ func TestSetup6_InvalidConfigFails(t *testing.T) {
 		t.Fatalf("setup6() with invalid config: expected nil handler")
 	}
 }
+
+func TestParseConfig_AuthSettings(t *testing.T) {
+	cfg, errs := parseConfig(
+		"svc_base_uri=https://svc.example.test",
+		"ipxe_base_uri=https://ipxe.example.test",
+		"auth_mode=optional",
+		"tokensmith_url=https://tokensmith.example.test",
+		"refresh_before=75s",
+	)
+	if len(errs) != 0 {
+		t.Fatalf("parseConfig() unexpected errors: %v", errs)
+	}
+	if cfg.authMode != "optional" {
+		t.Fatalf("authMode=%q, want %q", cfg.authMode, "optional")
+	}
+	if cfg.tokensmithURL != "https://tokensmith.example.test" {
+		t.Fatalf("tokensmithURL=%q", cfg.tokensmithURL)
+	}
+	if cfg.refreshBefore == nil || cfg.refreshBefore.String() != "1m15s" {
+		t.Fatalf("refreshBefore=%v, want 1m15s", cfg.refreshBefore)
+	}
+}
+
+func TestParseConfig_InvalidAuthInputs(t *testing.T) {
+	_, errs := parseConfig(
+		"svc_base_uri=https://svc.example.test",
+		"ipxe_base_uri=https://ipxe.example.test",
+		"auth_mode=shadow",
+		"refresh_before=not-a-duration",
+	)
+	if len(errs) < 2 {
+		t.Fatalf("expected at least 2 errors, got %d: %v", len(errs), errs)
+	}
+
+	hasModeErr := false
+	hasRefreshErr := false
+	for _, err := range errs {
+		if strings.Contains(err.Error(), "unknown auth_mode") {
+			hasModeErr = true
+		}
+		if strings.Contains(err.Error(), "invalid duration") {
+			hasRefreshErr = true
+		}
+	}
+	if !hasModeErr {
+		t.Fatalf("expected unknown auth_mode error, got: %v", errs)
+	}
+	if !hasRefreshErr {
+		t.Fatalf("expected invalid refresh_before duration error, got: %v", errs)
+	}
+}
+
+func TestConfigValidate_AuthRequiresTokensmithURL(t *testing.T) {
+	svc, _ := url.Parse("https://svc.example.test")
+	ipxe, _ := url.Parse("https://ipxe.example.test")
+
+	cfg := Config{svcBaseURI: svc, ipxeBaseURI: ipxe, authMode: "required"}
+	_, errs := cfg.validate()
+	if len(errs) == 0 {
+		t.Fatal("expected validation error when auth_mode is required and tokensmith_url is missing")
+	}
+
+	found := false
+	for _, err := range errs {
+		if strings.Contains(err.Error(), "tokensmith_url is required when auth_mode") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected missing tokensmith_url validation error, got: %v", errs)
+	}
+}
+
+func TestConfigValidate_DisabledAuthDoesNotRequireTokensmithURL(t *testing.T) {
+	svc, _ := url.Parse("https://svc.example.test")
+	ipxe, _ := url.Parse("https://ipxe.example.test")
+
+	cfg := Config{svcBaseURI: svc, ipxeBaseURI: ipxe, authMode: ""}
+	_, errs := cfg.validate()
+	for _, err := range errs {
+		if strings.Contains(err.Error(), "tokensmith_url is required when auth_mode") {
+			t.Fatalf("did not expect tokensmith_url error for disabled/zero auth mode: %v", errs)
+		}
+	}
+}

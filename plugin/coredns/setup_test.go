@@ -231,6 +231,81 @@ func TestParseConfigurationMissingArgument(t *testing.T) {
 	}
 }
 
+func TestParseConfigurationWithAuthDirectives(t *testing.T) {
+	corefile := `coresmd {
+		smd_url https://smd.cluster.local
+		auth_mode optional
+		tokensmith_url https://tokensmith.cluster.local
+		refresh_before 90s
+	}`
+
+	c := caddy.NewTestController("dns", corefile)
+	plugin, err := parse(c)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if plugin.authMode != "optional" {
+		t.Fatalf("Expected auth_mode optional, got %q", plugin.authMode)
+	}
+	if plugin.tokensmithURL != "https://tokensmith.cluster.local" {
+		t.Fatalf("Expected tokensmith_url to be set, got %q", plugin.tokensmithURL)
+	}
+	if plugin.refreshBefore.String() != "1m30s" {
+		t.Fatalf("Expected refresh_before 1m30s, got %s", plugin.refreshBefore)
+	}
+}
+
+func TestParseConfigurationAuthModeRequiresTokensmithURL(t *testing.T) {
+	corefile := `coresmd {
+		smd_url https://smd.cluster.local
+		auth_mode required
+	}`
+
+	c := caddy.NewTestController("dns", corefile)
+	_, err := parse(c)
+	if err == nil {
+		t.Fatal("Expected error for missing tokensmith_url with required mode")
+	}
+	if !strings.Contains(err.Error(), "tokensmith_url is required when auth_mode") {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+}
+
+func TestParseConfigurationInvalidAuthMode(t *testing.T) {
+	corefile := `coresmd {
+		smd_url https://smd.cluster.local
+		auth_mode shadow
+	}`
+
+	c := caddy.NewTestController("dns", corefile)
+	_, err := parse(c)
+	if err == nil {
+		t.Fatal("Expected error for invalid auth_mode")
+	}
+	if !strings.Contains(err.Error(), "unknown auth_mode") {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+}
+
+func TestParseConfigurationInvalidRefreshBefore(t *testing.T) {
+	corefile := `coresmd {
+		smd_url https://smd.cluster.local
+		auth_mode optional
+		tokensmith_url https://tokensmith.cluster.local
+		refresh_before nope
+	}`
+
+	c := caddy.NewTestController("dns", corefile)
+	_, err := parse(c)
+	if err == nil {
+		t.Fatal("Expected error for invalid refresh_before")
+	}
+	if !strings.Contains(err.Error(), "invalid refresh_before duration") {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+}
+
 func TestPluginOnStartup(t *testing.T) {
 	plugin := &Plugin{
 		smdURL:        "https://smd.cluster.local",

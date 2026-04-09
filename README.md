@@ -401,4 +401,3 @@ Once all prerequisites are set, you can run CoreDHCP or CoreDNS.
 - [SMD GitHub](https://github.com/OpenCHAMI/smd)
 - [GoReleaser Documentation](https://goreleaser.com/install/)
 - [Magellan (OpenCHAMI)](https://github.com/OpenCHAMI/magellan)
-

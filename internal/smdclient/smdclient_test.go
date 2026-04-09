@@ -340,6 +340,113 @@ func TestSmdClientAPIGet_ReadBodyError(t *testing.T) {
 }
 
 //==============================================================================
+// SmdClient.TokenProvider bearer token injection
+//==============================================================================
+
+func TestSmdClientAPIGet_TokenProvider(t *testing.T) {
+	tests := []struct {
+		name          string
+		tokenProvider func() string
+		wantHeader    string // expected Authorization header value, "" means absent
+	}{
+		{
+			name:          "nil_provider_sends_no_auth_header",
+			tokenProvider: nil,
+			wantHeader:    "",
+		},
+		{
+			name:          "provider_returns_empty_sends_no_auth_header",
+			tokenProvider: func() string { return "" },
+			wantHeader:    "",
+		},
+		{
+			name:          "provider_returns_token_sets_bearer_header",
+			tokenProvider: func() string { return "test-service-token" },
+			wantHeader:    "Bearer test-service-token",
+		},
+		{
+			name:          "provider_return_value_used_verbatim",
+			tokenProvider: func() string { return "eyJhbGciOiJSUzI1NiJ9.payload.sig" },
+			wantHeader:    "Bearer eyJhbGciOiJSUzI1NiJ9.payload.sig",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedAuthHeader string
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				capturedAuthHeader = r.Header.Get("Authorization")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("{}"))
+			}))
+			defer srv.Close()
+
+			baseURL, err := url.Parse(srv.URL)
+			if err != nil {
+				t.Fatalf("failed to parse test server URL: %v", err)
+			}
+
+			client := NewSmdClient(baseURL)
+			client.Client = srv.Client()
+			client.TokenProvider = tt.tokenProvider
+
+			_, err = client.APIGet("/test")
+			if err != nil {
+				t.Fatalf("APIGet() unexpected error: %v", err)
+			}
+
+			if capturedAuthHeader != tt.wantHeader {
+				t.Errorf("Authorization header = %q, want %q", capturedAuthHeader, tt.wantHeader)
+			}
+		})
+	}
+}
+
+func TestSmdClientAPIGet_TokenProviderCalledPerRequest(t *testing.T) {
+	callCount := 0
+	tokens := []string{"first-token", "second-token", "third-token"}
+	tokenProvider := func() string {
+		t := tokens[callCount%len(tokens)]
+		callCount++
+		return t
+	}
+
+	var receivedHeaders []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedHeaders = append(receivedHeaders, r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("{}"))
+	}))
+	defer srv.Close()
+
+	baseURL, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("failed to parse test server URL: %v", err)
+	}
+
+	client := NewSmdClient(baseURL)
+	client.Client = srv.Client()
+	client.TokenProvider = tokenProvider
+
+	for i := 0; i < 3; i++ {
+		if _, err := client.APIGet("/test"); err != nil {
+			t.Fatalf("APIGet() call %d unexpected error: %v", i, err)
+		}
+	}
+
+	if callCount != 3 {
+		t.Errorf("TokenProvider call count = %d, want 3", callCount)
+	}
+	for i, hdr := range receivedHeaders {
+		want := "Bearer " + tokens[i]
+		if hdr != want {
+			t.Errorf("request %d Authorization = %q, want %q", i, hdr, want)
+		}
+	}
+}
+
+//==============================================================================
 // Struct JSON behavior
 //==============================================================================
 

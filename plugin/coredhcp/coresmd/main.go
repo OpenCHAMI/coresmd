@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/insomniacslk/dhcp/dhcpv6"
 	"github.com/sirupsen/logrus"
 
+	"github.com/openchami/coresmd/internal/auth"
 	"github.com/openchami/coresmd/internal/cache"
 	"github.com/openchami/coresmd/internal/debug"
 	"github.com/openchami/coresmd/internal/iface"
@@ -43,6 +45,11 @@ type Config struct {
 	domain      string         // domain
 	ruleLog     string         // rule_log
 	rules       []rule.Rule    // rule
+
+	// Auth (optional TokenSmith service-to-service authentication)
+	authMode      auth.Mode      // auth_mode
+	tokensmithURL string         // tokensmith_url
+	refreshBefore *time.Duration // refresh_before
 }
 
 func (c Config) String() string {
@@ -118,6 +125,26 @@ func setup6(args ...string) (handler.Handler6, error) {
 		return nil, fmt.Errorf("failed to set CA certificate: %w", err)
 	}
 
+	// Wire optional TokenSmith authentication
+	if cfg.authMode == auth.ModeOptional || cfg.authMode == auth.ModeRequired {
+		bootstrapToken := os.Getenv(auth.BootstrapTokenEnvVar)
+		var refreshBefore time.Duration
+		if cfg.refreshBefore != nil {
+			refreshBefore = *cfg.refreshBefore
+		}
+		authProvider := auth.New(auth.Config{
+			Mode:          cfg.authMode,
+			TokensmithURL: cfg.tokensmithURL,
+			RefreshBefore: refreshBefore,
+		}, bootstrapToken, log)
+		if err := authProvider.Initialize(); err != nil {
+			return nil, err
+		}
+		authProvider.StartAutoRefresh()
+		smdClient.TokenProvider = authProvider.GetBearerToken
+		log.Infof("coresmd auth enabled (mode: %s, tokensmith: %s)", cfg.authMode, cfg.tokensmithURL)
+	}
+
 	// Create cache and start fetching
 	var err error
 	if smdCache, err = cache.NewCache(log, cfg.cacheValid.String(), smdClient); err != nil {
@@ -169,6 +196,26 @@ func setup4(args ...string) (handler.Handler4, error) {
 	smdClient := smdclient.NewSmdClient(cfg.svcBaseURI)
 	if err := smdClient.UseCACert(cfg.caCert); err != nil {
 		return nil, fmt.Errorf("failed to set CA certificate: %w", err)
+	}
+
+	// Wire optional TokenSmith authentication
+	if cfg.authMode == auth.ModeOptional || cfg.authMode == auth.ModeRequired {
+		bootstrapToken := os.Getenv(auth.BootstrapTokenEnvVar)
+		var refreshBefore time.Duration
+		if cfg.refreshBefore != nil {
+			refreshBefore = *cfg.refreshBefore
+		}
+		authProvider := auth.New(auth.Config{
+			Mode:          cfg.authMode,
+			TokensmithURL: cfg.tokensmithURL,
+			RefreshBefore: refreshBefore,
+		}, bootstrapToken, log)
+		if err := authProvider.Initialize(); err != nil {
+			return nil, err
+		}
+		authProvider.StartAutoRefresh()
+		smdClient.TokenProvider = authProvider.GetBearerToken
+		log.Infof("coresmd auth enabled (mode: %s, tokensmith: %s)", cfg.authMode, cfg.tokensmithURL)
 	}
 
 	// Create cache and start fetching
@@ -341,6 +388,22 @@ func parseConfig(argv ...string) (cfg Config, errs []error) {
 				continue
 			}
 			cfg.rules = append(cfg.rules, rule)
+		case "auth_mode":
+			mode, err := auth.ParseMode(opt[1])
+			if err != nil {
+				errs = append(errs, fmt.Errorf("non-comment arg %d: %w", idx, err))
+				continue
+			}
+			cfg.authMode = mode
+		case "tokensmith_url":
+			cfg.tokensmithURL = strings.TrimSpace(opt[1])
+		case "refresh_before":
+			d, err := time.ParseDuration(opt[1])
+			if err != nil {
+				errs = append(errs, fmt.Errorf("non-comment arg %d: %s: invalid duration %q: %w", idx, opt[0], opt[1], err))
+				continue
+			}
+			cfg.refreshBefore = &d
 		default:
 			errs = append(errs, fmt.Errorf("non-comment arg %d: unknown config key '%s' (skipping)", idx, opt[0]))
 			continue
@@ -408,6 +471,9 @@ func (c *Config) validate() (warns []string, errs []error) {
 		if strings.TrimSpace(c.rules[i].Log) == "" {
 			c.rules[i].Log = c.ruleLog
 		}
+	}
+	if c.authMode != auth.ModeDisabled && c.authMode != "" && c.tokensmithURL == "" {
+		errs = append(errs, fmt.Errorf("tokensmith_url is required when auth_mode is %s", c.authMode))
 	}
 	return
 }

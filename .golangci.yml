@@ -32,4 +32,4 @@ formatters:
       local-prefixes:
         - github.com/openchami/coresmd/
   exclusions:
-    generated: lax 
+    generated: lax

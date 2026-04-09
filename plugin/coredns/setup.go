@@ -8,6 +8,7 @@ package plugin
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/coredns/caddy"
@@ -15,6 +16,7 @@ import (
 	"github.com/coredns/coredns/plugin"
 	"github.com/sirupsen/logrus"
 
+	"github.com/openchami/coresmd/internal/auth"
 	"github.com/openchami/coresmd/internal/cache"
 	"github.com/openchami/coresmd/internal/smdclient"
 	"github.com/openchami/coresmd/internal/version"
@@ -35,6 +37,12 @@ type Plugin struct {
 	// Shared infrastructure
 	cache     *cache.Cache
 	smdClient *smdclient.SmdClient
+
+	// Auth (optional TokenSmith service-to-service authentication)
+	authMode      auth.Mode
+	tokensmithURL string
+	refreshBefore time.Duration
+	authProvider  *auth.Provider
 }
 
 // Global variables
@@ -129,6 +137,35 @@ func parse(c *caddy.Controller) (*Plugin, error) {
 				p.cacheDuration = c.Val()
 				log.Debugf("Set cache_duration to: %s", p.cacheDuration)
 
+			case "auth_mode":
+				if !c.NextArg() {
+					return nil, c.ArgErr()
+				}
+				mode, err := auth.ParseMode(c.Val())
+				if err != nil {
+					return nil, c.Errf("%v", err)
+				}
+				p.authMode = mode
+				log.Debugf("Set auth_mode to: %s", p.authMode)
+
+			case "tokensmith_url":
+				if !c.NextArg() {
+					return nil, c.ArgErr()
+				}
+				p.tokensmithURL = c.Val()
+				log.Debugf("Set tokensmith_url to: %s", p.tokensmithURL)
+
+			case "refresh_before":
+				if !c.NextArg() {
+					return nil, c.ArgErr()
+				}
+				d, err := time.ParseDuration(c.Val())
+				if err != nil {
+					return nil, c.Errf("invalid refresh_before duration %q: %v", c.Val(), err)
+				}
+				p.refreshBefore = d
+				log.Debugf("Set refresh_before to: %s", p.refreshBefore)
+
 			case "zone":
 				// Example usage in Corefile:
 				//   zone cluster.local {
@@ -159,6 +196,9 @@ func parse(c *caddy.Controller) (*Plugin, error) {
 	}
 	if p.cacheDuration == "" {
 		p.cacheDuration = "30s"
+	}
+	if p.authMode != auth.ModeDisabled && p.authMode != "" && p.tokensmithURL == "" {
+		return nil, fmt.Errorf("tokensmith_url is required when auth_mode is %s", p.authMode)
 	}
 
 	return p, nil
@@ -228,6 +268,22 @@ func (p *Plugin) OnStartup() error {
 			log.Infof("set CA certificate for SMD to the contents of %s", p.caCert)
 		} else {
 			log.Infof("CA certificate path was empty, not setting")
+		}
+
+		// Wire optional TokenSmith authentication
+		if p.authMode == auth.ModeOptional || p.authMode == auth.ModeRequired {
+			bootstrapToken := os.Getenv(auth.BootstrapTokenEnvVar)
+			p.authProvider = auth.New(auth.Config{
+				Mode:          p.authMode,
+				TokensmithURL: p.tokensmithURL,
+				RefreshBefore: p.refreshBefore,
+			}, bootstrapToken, log)
+			if err := p.authProvider.Initialize(); err != nil {
+				return err
+			}
+			p.authProvider.StartAutoRefresh()
+			p.smdClient.TokenProvider = p.authProvider.GetBearerToken
+			log.Infof("coresmd auth enabled (mode: %s, tokensmith: %s)", p.authMode, p.tokensmithURL)
 		}
 
 		// Create cache
