@@ -29,12 +29,12 @@ jobs:
     steps:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
-      
+
       - name: Set up latest stable Go
         uses: actions/setup-go@v6
         with:
           go-version: stable
-      
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -59,7 +59,7 @@ jobs:
           echo "GO_VERSION=$(go version | awk '{print $3}')" >> $GITHUB_ENV
           echo "BUILD_USER=$(whoami)" >> $GITHUB_ENV
           echo "CGO_ENABLED=1" >> $GITHUB_ENV
-          
+
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "IS_PR_BUILD=true" >> $GITHUB_ENV
             echo "DOCKER_TAG=pr-${{ github.event.number }}" >> $GITHUB_ENV

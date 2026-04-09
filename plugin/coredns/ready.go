@@ -40,6 +40,6 @@ func (p Plugin) OnStartupComplete() error {
 }
 
 func (p Plugin) OnShutdown() error {
-	// Plugin shutdown is complete
+	p.authProvider.Stop()
 	return nil
 }

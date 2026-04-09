@@ -24,6 +24,11 @@ var (
 type SmdClient struct {
 	*http.Client
 	BaseURL *url.URL
+	// TokenProvider, when non-nil, is called before each request. If it returns
+	// a non-empty string that value is set as a Bearer token in the Authorization
+	// header. Set this field to auth.Provider.GetBearerToken to enable optional
+	// or required TokenSmith authentication.
+	TokenProvider func() string
 }
 
 type EthernetInterface struct {
@@ -88,6 +93,12 @@ func (sc *SmdClient) APIGet(path string) ([]byte, error) {
 	req, err := http.NewRequest("GET", endpoint.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if sc.TokenProvider != nil {
+		if token := sc.TokenProvider(); token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
 	}
 
 	if sc == nil {

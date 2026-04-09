@@ -65,7 +65,49 @@ The CoreSMD CoreDNS plugin is included in the CoreSMD binary. No additional inst
 | `smd_url` | string | required | SMD API endpoint URL |
 | `ca_cert` | string | "" | Path to CA certificate for SMD TLS |
 | `cache_duration` | duration | "30s" | Cache refresh interval |
+| `auth_mode` | enum | `disabled` | Outbound SMD auth mode: `disabled`, `optional`, or `required` |
+| `tokensmith_url` | string | required when auth enabled | TokenSmith base URL used for bootstrap exchange |
+| `refresh_before` | duration | `2m` | How early to refresh expiring service tokens |
 | `zone` | block | auto | Zone configuration block |
+
+### TokenSmith Authentication
+
+When enabled, the plugin obtains a service token from TokenSmith and includes
+`Authorization: Bearer <token>` on outbound SMD API calls.
+
+Auth settings live in the `coresmd` Corefile block:
+
+- `auth_mode`
+  - `disabled` (default): never attempts auth
+  - `optional`: attempts auth, continues unauthenticated if token bootstrap fails
+  - `required`: startup fails if token bootstrap fails
+- `tokensmith_url`: required for `optional` and `required`
+- `refresh_before`: optional duration for proactive token renewal (default `2m`)
+
+The bootstrap token is read from the environment variable
+`TOKENSMITH_BOOTSTRAP_TOKEN`.
+
+`target_service` and `scopes` are intentionally not configured in CoreDNS.
+TokenSmith derives those claims from the bootstrap token itself.
+
+Example:
+
+```corefile
+. {
+  coresmd {
+    smd_url https://smd.cluster.local
+    auth_mode required
+    tokensmith_url https://tokensmith.cluster.local
+    refresh_before 90s
+
+    zone cluster.local {
+      nodes nid{04d}
+    }
+  }
+  prometheus 0.0.0.0:9153
+  forward . 8.8.8.8
+}
+```
 
 ### Zone Configuration
 

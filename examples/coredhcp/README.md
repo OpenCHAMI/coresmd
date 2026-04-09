@@ -105,6 +105,50 @@ plugins:
 
 See [coredhcp.yaml](coredhcp.yaml) for a complete example showing both DHCPv4 and DHCPv6 configurations.
 
+## TokenSmith Auth for SMD Requests
+
+The CoreDHCP `coresmd` plugin can authenticate outbound SMD API requests using
+TokenSmith service tokens.
+
+Configure auth in the `coresmd` key-value block:
+
+- `auth_mode={disabled|optional|required}`
+  - `disabled` (default): no auth
+  - `optional`: try auth, continue unauthenticated if bootstrap exchange fails
+  - `required`: fail startup if bootstrap exchange fails
+- `tokensmith_url=https://tokensmith.cluster.local`
+  - required for `optional` and `required`
+- `refresh_before=2m`
+  - optional lead time before token expiry for proactive refresh
+
+Set the bootstrap token in the environment for the CoreDHCP process:
+
+```bash
+export TOKENSMITH_BOOTSTRAP_TOKEN="<bootstrap-token>"
+```
+
+Example:
+
+```yaml
+plugins:
+  - coresmd: |
+      svc_base_uri=https://smd.openchami.cluster
+      ipxe_base_uri=http://172.16.0.253:8081
+      ca_cert=/root_ca/root_ca.crt
+      cache_valid=30s
+
+      auth_mode=required
+      tokensmith_url=https://tokensmith.cluster.local
+      refresh_before=90s
+
+      rule=type:Node,hostname:nid{04d}
+      rule=type:NodeBMC,hostname:bmc{04d}
+      domain=openchami.cluster
+```
+
+`target_service` and `scopes` are intentionally omitted from plugin config.
+TokenSmith derives both from bootstrap token claims.
+
 ## Custom Hostnames
 
 Hostname patterns can be used to specify custom hostnames for nodes and BMCs. See [**hostnames.md**](hostnames.md) for more details.

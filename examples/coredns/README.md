@@ -96,6 +96,41 @@ coresmd {
 }
 ```
 
+### Enabling TokenSmith Auth for SMD Requests
+
+The CoreDNS `coresmd` plugin can authenticate outbound SMD API requests using
+TokenSmith-issued service tokens.
+
+Auth directives in the `coresmd` block:
+
+- `auth_mode`: `disabled` (default), `optional`, or `required`
+- `tokensmith_url`: required when `auth_mode` is `optional` or `required`
+- `refresh_before`: optional token refresh lead time (default `2m`)
+
+Set the bootstrap token in the environment before starting CoreDNS:
+
+```bash
+export TOKENSMITH_BOOTSTRAP_TOKEN="<bootstrap-token>"
+```
+
+Example Corefile snippet:
+
+```corefile
+coresmd {
+   smd_url https://smd.cluster.local
+   auth_mode optional
+   tokensmith_url https://tokensmith.cluster.local
+   refresh_before 2m
+
+   zone openchami.cluster {
+      nodes nid{04d}
+   }
+}
+```
+
+`target_service` and `scopes` are not configured in the plugin. TokenSmith
+reads those constraints from the bootstrap token claims.
+
 ## Testing
 
 ### Test DNS Resolution

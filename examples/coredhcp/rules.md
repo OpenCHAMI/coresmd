@@ -117,6 +117,37 @@ A rule may set:
 - `routers` (DHCPv4 option 3)
 - `netmask` (DHCPv4 option 1)
 
+### `auth_mode={disabled|optional|required}`
+
+Controls outbound SMD authentication behavior using TokenSmith-issued service
+tokens.
+
+- `disabled` (default): do not attempt auth
+- `optional`: attempt auth at startup, continue unauthenticated if exchange fails
+- `required`: fail startup if exchange fails
+
+### `tokensmith_url=URL`
+
+TokenSmith base URL used for bootstrap token exchange.
+
+Required when `auth_mode` is `optional` or `required`.
+
+### `refresh_before=DURATION`
+
+Optional lead time before token expiration to refresh proactively.
+
+**Default:** `2m`
+
+Uses Go duration syntax (for example `30s`, `90s`, `2m`, `5m`).
+
+### Token Bootstrap Environment
+
+Set `TOKENSMITH_BOOTSTRAP_TOKEN` in the CoreDHCP process environment. The
+plugin reads this value at startup.
+
+`target_service` and `scopes` are intentionally not configured in CoreDHCP.
+TokenSmith reads them from bootstrap token claims.
+
 ## Migrating from `*_pattern`
 
 Older CoreSMD configurations used legacy pattern directives (for example
