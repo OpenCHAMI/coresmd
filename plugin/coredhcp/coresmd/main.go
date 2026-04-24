@@ -33,18 +33,18 @@ import (
 
 type Config struct {
 	// Parsed from configuration file
-	svcBaseURI     *url.URL              // svc_base_uri
-	ipxeBaseURI    *url.URL              // ipxe_base_uri
-	caCert         string                // ca_cert
-	cacheValid     *time.Duration        // cache_valid
-	leaseTime      *time.Duration        // lease_time
-	singlePort     bool                  // single_port
-	tftpDir        string                // tftp_dir
-	tftpPort       int                   // tftp_port
-	domain         string                // domain
-	ruleLog        string                // rule_log
-	rules          []rule.Rule           // rule
-	subnetContext  *subnet.SubnetContext // subnet configuration
+	svcBaseURI    *url.URL              // svc_base_uri
+	ipxeBaseURI   *url.URL              // ipxe_base_uri
+	caCert        string                // ca_cert
+	cacheValid    *time.Duration        // cache_valid
+	leaseTime     *time.Duration        // lease_time
+	singlePort    bool                  // single_port
+	tftpDir       string                // tftp_dir
+	tftpPort      int                   // tftp_port
+	domain        string                // domain
+	ruleLog       string                // rule_log
+	rules         []rule.Rule           // rule
+	subnetContext *subnet.SubnetContext // subnet configuration
 }
 
 func (c Config) String() string {
@@ -74,10 +74,10 @@ const (
 )
 
 var (
-	smdCache       *cache.Cache
-	globalConfig   Config
-	subnetContext  *subnet.SubnetContext
-	log            = logger.GetLogger("plugins/coresmd")
+	smdCache      *cache.Cache
+	globalConfig  Config
+	subnetContext *subnet.SubnetContext
+	log           = logger.GetLogger("plugins/coresmd")
 )
 
 var Plugin = plugins.Plugin{

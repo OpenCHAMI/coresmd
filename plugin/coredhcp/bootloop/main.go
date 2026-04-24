@@ -65,9 +65,9 @@ type Config struct {
 
 // SubnetPoolConfig represents a pool configuration for a specific subnet
 type SubnetPoolConfig struct {
-	CIDR     string
-	StartIP  net.IP
-	EndIP    net.IP
+	CIDR      string
+	StartIP   net.IP
+	EndIP     net.IP
 	IPv4Range uint32
 }
 
@@ -340,9 +340,9 @@ func parseConfig(argv ...string) (cfg Config, errs []error) {
 			ipv4Range := binary.BigEndian.Uint32(endIP.To4()) - binary.BigEndian.Uint32(startIP.To4()) + 1
 
 			cfg.subnetPools[cidr] = &SubnetPoolConfig{
-				CIDR:     cidr,
-				StartIP:  startIP,
-				EndIP:    endIP,
+				CIDR:      cidr,
+				StartIP:   startIP,
+				EndIP:     endIP,
 				IPv4Range: ipv4Range,
 			}
 		default:
