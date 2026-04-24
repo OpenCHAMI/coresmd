@@ -336,11 +336,10 @@ func TestConfigValidate(t *testing.T) {
 			name: "missing ipv4_start and ipv4_end both error",
 			cfg: Config{
 				leaseFile: "/tmp/leases",
-				// both nil
+				// both nil — neither subnet_pool nor legacy pool configured
 			},
 			wantErrSub: []string{
-				"ipv4_start is required",
-				"ipv4_end is required",
+				"must configure either subnet_pool or ipv4_start/ipv4_end",
 			},
 		},
 		{

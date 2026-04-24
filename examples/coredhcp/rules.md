@@ -562,6 +562,49 @@ The old `node_pattern`, `bmc_pattern`, `hostname_by_type`, and
 This produces the same administrator-facing naming scheme as the legacy knobs,
 while preserving rule ordering and allowing additional matching criteria.
 
+## Multiple Subnet Support
+
+CoreSMD provides two complementary mechanisms for multi-subnet environments:
+
+### Config-Level `subnet=`
+
+The `subnet=CIDR,ROUTER` directive configures subnet-aware IP selection and
+provides baseline DHCP options (router and netmask) based on the relay agent's
+giaddr:
+
+```yaml
+- coresmd: |
+    subnet=10.40.1.0/24,10.40.1.1
+    subnet=10.40.3.0/24,10.40.3.1
+```
+
+When configured, CoreSMD uses giaddr to determine which subnet the DHCP request
+came from, filters the component's IPs to those belonging to that subnet, and
+sets the corresponding router (option 3) and netmask (option 1).
+
+### Rule-Level `subnet:`
+
+Rules can also match on subnets and set per-rule routers and netmask:
+
+```yaml
+- coresmd: |
+    rule=subnet:10.40.1.0/24,hostname:compute-{04d},routers:10.40.1.1,cidr:24
+    rule=subnet:10.40.3.0/24,hostname:storage-{04d},routers:10.40.3.1,cidr:24
+```
+
+### Order of Operations
+
+When both are configured:
+
+1. **Config-level `subnet=`** sets baseline router and netmask options
+2. **`rule=...` evaluation** runs after, and matching rules **override** the
+   baseline options via `resp.Options.Update()`
+
+This means rule-level actions always take precedence over config-level subnet
+settings. If you only need subnet-aware IP selection (giaddr filtering) without
+per-subnet hostnames, use `subnet=` alone. If you need per-subnet hostnames,
+routers, or netmasks, use rules with `subnet:` match keys.
+
 ## Caveats
 
 - At least one action must be specified: `hostname`, `routers`, `netmask`, or `cidr`.

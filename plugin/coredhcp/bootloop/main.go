@@ -24,6 +24,7 @@ import (
 
 	"github.com/openchami/coresmd/internal/debug"
 	"github.com/openchami/coresmd/internal/ipxe"
+	"github.com/openchami/coresmd/internal/subnet"
 	"github.com/openchami/coresmd/internal/version"
 )
 
@@ -39,22 +40,35 @@ type PluginState struct {
 	// Rough lock for the whole plugin
 	sync.Mutex
 	// Recordsv4 holds a MAC -> IP address and lease time mapping
-	Recordsv4 map[string]*Record
-	LeaseTime time.Duration
-	leasedb   *sql.DB
-	allocator allocators.Allocator
+	Recordsv4      map[string]*Record
+	LeaseTime      time.Duration
+	leasedb        *sql.DB
+	allocator      allocators.Allocator
+	subnetPoolMgr  *subnet.SubnetPoolManager
+	useSubnetPools bool
 }
 
 type Config struct {
 	// Parsed from configuration file
 	leaseFile  string         // lease_file
 	leaseTime  *time.Duration // lease_time
-	ipv4Start  *net.IP        // ipv4_start
-	ipv4End    *net.IP        // ipv4_end
+	ipv4Start  *net.IP        // ipv4_start (legacy single pool)
+	ipv4End    *net.IP        // ipv4_end (legacy single pool)
 	scriptPath string         // script_path
+
+	// Subnet-aware pools
+	subnetPools map[string]*SubnetPoolConfig // subnet_pool configurations
 
 	// Used, but not parse from configuration
 	ipv4Range uint32 // ipv4_range
+}
+
+// SubnetPoolConfig represents a pool configuration for a specific subnet
+type SubnetPoolConfig struct {
+	CIDR     string
+	StartIP  net.IP
+	EndIP    net.IP
+	IPv4Range uint32
 }
 
 func (c Config) String() string {
@@ -116,12 +130,30 @@ func setup4(args ...string) (handler.Handler4, error) {
 
 	// Set parsed config as global to be accessed by other functions
 	globalConfig = cfg
+	p.LeaseTime = *cfg.leaseTime
 
-	// Create IP address allocator based on IP range
+	// Check if using subnet pools or legacy single pool
 	var err error
-	p.allocator, err = bitmap.NewIPv4Allocator(*cfg.ipv4Start, *cfg.ipv4End)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create an allocator: %w", err)
+	if len(cfg.subnetPools) > 0 {
+		// Use subnet-aware pools
+		log.Infof("configuring %d subnet-specific IP pools", len(cfg.subnetPools))
+		p.subnetPoolMgr = subnet.NewSubnetPoolManager()
+		p.useSubnetPools = true
+
+		for cidr, poolCfg := range cfg.subnetPools {
+			log.Infof("adding pool for subnet %s: %s - %s", cidr, poolCfg.StartIP, poolCfg.EndIP)
+			if err := p.subnetPoolMgr.AddPool(cidr, poolCfg.StartIP, poolCfg.EndIP); err != nil {
+				return nil, fmt.Errorf("failed to add pool for subnet %s: %w", cidr, err)
+			}
+		}
+	} else {
+		// Use legacy single pool
+		log.Info("using legacy single IP pool")
+		p.useSubnetPools = false
+		p.allocator, err = bitmap.NewIPv4Allocator(*cfg.ipv4Start, *cfg.ipv4End)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create an allocator: %w", err)
+		}
 	}
 
 	// Set up storage backend using passed file path
@@ -134,13 +166,42 @@ func setup4(args ...string) (handler.Handler4, error) {
 	}
 
 	// Allocate any pre-existing leases
-	for _, v := range p.Recordsv4 {
-		ip, err := p.allocator.Allocate(net.IPNet{IP: v.IP})
-		if err != nil {
-			return nil, fmt.Errorf("failed to re-allocate leased ip %v: %v", v.IP.String(), err)
+	if p.useSubnetPools {
+		// For subnet pools, we need to determine which pool each IP belongs to
+		for mac, v := range p.Recordsv4 {
+			allocated := false
+			for cidr, pool := range p.subnetPoolMgr.Pools {
+				if pool.CIDR.Contains(v.IP) {
+					allocator, err := p.subnetPoolMgr.GetAllocatorForSubnet(cidr)
+					if err != nil {
+						return nil, fmt.Errorf("failed to get allocator for subnet %s: %w", cidr, err)
+					}
+					ip, err := allocator.Allocate(net.IPNet{IP: v.IP})
+					if err != nil {
+						return nil, fmt.Errorf("failed to re-allocate leased ip %v in subnet %s: %v", v.IP.String(), cidr, err)
+					}
+					if ip.IP.String() != v.IP.String() {
+						return nil, fmt.Errorf("allocator did not re-allocate requested leased ip %v: %v", v.IP.String(), ip.String())
+					}
+					allocated = true
+					log.Debugf("re-allocated IP %s for MAC %s in subnet %s", v.IP, mac, cidr)
+					break
+				}
+			}
+			if !allocated {
+				log.Warnf("existing lease for MAC %s with IP %s does not match any configured subnet", mac, v.IP)
+			}
 		}
-		if ip.IP.String() != v.IP.String() {
-			return nil, fmt.Errorf("allocator did not re-allocate requested leased ip %v: %v", v.IP.String(), ip.String())
+	} else {
+		// Legacy single pool
+		for _, v := range p.Recordsv4 {
+			ip, err := p.allocator.Allocate(net.IPNet{IP: v.IP})
+			if err != nil {
+				return nil, fmt.Errorf("failed to re-allocate leased ip %v: %v", v.IP.String(), err)
+			}
+			if ip.IP.String() != v.IP.String() {
+				return nil, fmt.Errorf("allocator did not re-allocate requested leased ip %v: %v", v.IP.String(), ip.String())
+			}
 		}
 	}
 
@@ -233,6 +294,57 @@ func parseConfig(argv ...string) (cfg Config, errs []error) {
 			} else {
 				cfg.ipv4End = &ipv4End
 			}
+		case "subnet_pool":
+			if cfg.subnetPools == nil {
+				cfg.subnetPools = make(map[string]*SubnetPoolConfig)
+			}
+			parts := strings.Split(opt[1], ",")
+			if len(parts) != 3 {
+				errs = append(errs, fmt.Errorf("non-comment arg %d: %s: invalid format '%s', expected 'cidr,start_ip,end_ip' (skipping)", idx, opt[0], opt[1]))
+				continue
+			}
+			cidr := strings.TrimSpace(parts[0])
+			startIPStr := strings.TrimSpace(parts[1])
+			endIPStr := strings.TrimSpace(parts[2])
+
+			// Validate CIDR
+			_, ipnet, err := net.ParseCIDR(cidr)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("non-comment arg %d: %s: invalid CIDR '%s': %w", idx, opt[0], cidr, err))
+				continue
+			}
+
+			// Parse and validate start IP
+			startIP := net.ParseIP(startIPStr)
+			if startIP == nil || startIP.To4() == nil {
+				errs = append(errs, fmt.Errorf("non-comment arg %d: %s: invalid start IP '%s' (skipping)", idx, opt[0], startIPStr))
+				continue
+			}
+			if !ipnet.Contains(startIP) {
+				errs = append(errs, fmt.Errorf("non-comment arg %d: %s: start IP '%s' not in subnet '%s' (skipping)", idx, opt[0], startIPStr, cidr))
+				continue
+			}
+
+			// Parse and validate end IP
+			endIP := net.ParseIP(endIPStr)
+			if endIP == nil || endIP.To4() == nil {
+				errs = append(errs, fmt.Errorf("non-comment arg %d: %s: invalid end IP '%s' (skipping)", idx, opt[0], endIPStr))
+				continue
+			}
+			if !ipnet.Contains(endIP) {
+				errs = append(errs, fmt.Errorf("non-comment arg %d: %s: end IP '%s' not in subnet '%s' (skipping)", idx, opt[0], endIPStr, cidr))
+				continue
+			}
+
+			// Calculate range
+			ipv4Range := binary.BigEndian.Uint32(endIP.To4()) - binary.BigEndian.Uint32(startIP.To4()) + 1
+
+			cfg.subnetPools[cidr] = &SubnetPoolConfig{
+				CIDR:     cidr,
+				StartIP:  startIP,
+				EndIP:    endIP,
+				IPv4Range: ipv4Range,
+			}
 		default:
 			errs = append(errs, fmt.Errorf("non-comment arg %d: unknown config key '%s' (skipping)", idx, opt[0]))
 			continue
@@ -252,22 +364,36 @@ func (c *Config) validate() (warns []string, errs []error) {
 	if c.leaseFile == "" {
 		errs = append(errs, fmt.Errorf("lease_file is required"))
 	}
-	if c.ipv4Start == nil || c.ipv4End == nil {
+
+	// Check if using subnet pools or legacy configuration
+	usingSubnetPools := len(c.subnetPools) > 0
+	usingLegacyPool := c.ipv4Start != nil || c.ipv4End != nil
+
+	if usingSubnetPools && usingLegacyPool {
+		errs = append(errs, fmt.Errorf("cannot use both subnet_pool and legacy ipv4_start/ipv4_end configuration"))
+	} else if !usingSubnetPools && !usingLegacyPool {
+		errs = append(errs, fmt.Errorf("must configure either subnet_pool or ipv4_start/ipv4_end"))
+	}
+
+	// Validate legacy pool configuration
+	if usingLegacyPool && !usingSubnetPools {
 		if c.ipv4Start == nil {
-			errs = append(errs, fmt.Errorf("ipv4_start is required"))
+			errs = append(errs, fmt.Errorf("ipv4_start is required when not using subnet_pool"))
 		}
 		if c.ipv4End == nil {
-			errs = append(errs, fmt.Errorf("ipv4_end is required"))
+			errs = append(errs, fmt.Errorf("ipv4_end is required when not using subnet_pool"))
 		}
-	} else {
-		// Ensure IP range is valid
-		if binary.BigEndian.Uint32(c.ipv4Start.To4()) > binary.BigEndian.Uint32(c.ipv4End.To4()) {
-			errs = append(errs, fmt.Errorf("invalid range: ipv4_end (%s) must be equal to or higher than ipv4_start (%s)", c.ipv4End.To4(), c.ipv4Start.To4()))
-		} else {
-			// Calculate number of IP addresses in range
-			c.ipv4Range = binary.BigEndian.Uint32(c.ipv4End.To4()) - binary.BigEndian.Uint32(c.ipv4Start.To4()) + 1
+		if c.ipv4Start != nil && c.ipv4End != nil {
+			// Ensure IP range is valid
+			if binary.BigEndian.Uint32(c.ipv4Start.To4()) > binary.BigEndian.Uint32(c.ipv4End.To4()) {
+				errs = append(errs, fmt.Errorf("invalid range: ipv4_end (%s) must be equal to or higher than ipv4_start (%s)", c.ipv4End.To4(), c.ipv4Start.To4()))
+			} else {
+				// Calculate number of IP addresses in range
+				c.ipv4Range = binary.BigEndian.Uint32(c.ipv4End.To4()) - binary.BigEndian.Uint32(c.ipv4Start.To4()) + 1
+			}
 		}
 	}
+
 	if c.leaseTime == nil {
 		warns = append(warns, fmt.Sprintf("lease_time unset, defaulting to %s", defaultLeaseTime))
 		duration, err := time.ParseDuration(defaultLeaseTime)
@@ -294,13 +420,31 @@ func (p *PluginState) Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) 
 	// Set root path to this server's IP
 	resp.Options.Update(dhcpv4.OptRootPath(resp.ServerIPAddr.String()))
 
+	giaddr := req.GatewayIPAddr
 	record, ok := p.Recordsv4[req.ClientHWAddr.String()]
 	hostname := req.HostName()
 	cinfo := req.Options.Get(dhcpv4.OptionUserClassInformation)
 	if !ok {
 		// Allocating new address since there isn't one allocated
-		log.Printf("MAC address %s is new, leasing new IPv4 address", req.ClientHWAddr.String())
-		ip, err := p.allocator.Allocate(net.IPNet{})
+		log.Printf("MAC address %s is new, leasing new IPv4 address (giaddr=%s)", req.ClientHWAddr.String(), giaddr)
+
+		// Select the appropriate allocator based on configuration
+		var allocator allocators.Allocator
+		var cidr string
+		var err error
+
+		if p.useSubnetPools {
+			allocator, cidr, err = p.subnetPoolMgr.GetAllocatorForGiaddr(giaddr)
+			if err != nil {
+				log.Errorf("Could not find allocator for giaddr %s: %v", giaddr, err)
+				return nil, true
+			}
+			log.Debugf("using allocator for subnet %s (giaddr=%s)", cidr, giaddr)
+		} else {
+			allocator = p.allocator
+		}
+
+		ip, err := allocator.Allocate(net.IPNet{})
 		if err != nil {
 			log.Errorf("Could not allocate IP for MAC %s: %v", req.ClientHWAddr.String(), err)
 			return nil, true
@@ -318,7 +462,11 @@ func (p *PluginState) Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) 
 		record = &rec
 		resp.YourIPAddr = record.IP
 		resp.Options.Update(dhcpv4.OptIPAddressLeaseTime(p.LeaseTime.Round(time.Second)))
-		log.Infof("assigning %s to %s with a lease duration of %s", record.IP, req.ClientHWAddr.String(), p.LeaseTime)
+		if p.useSubnetPools {
+			log.Infof("assigning %s to %s from subnet %s with a lease duration of %s", record.IP, req.ClientHWAddr.String(), cidr, p.LeaseTime)
+		} else {
+			log.Infof("assigning %s to %s with a lease duration of %s", record.IP, req.ClientHWAddr.String(), p.LeaseTime)
+		}
 
 		if string(cinfo) != "iPXE" {
 			// BOOT STAGE 1: Send iPXE bootloader over TFTP
@@ -351,8 +499,22 @@ func (p *PluginState) Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) 
 				log.Errorf("DeleteIPAddress for MAC %s failed: %v", req.ClientHWAddr.String(), err)
 			}
 			delete(p.Recordsv4, req.ClientHWAddr.String())
-			if err := p.allocator.Free(net.IPNet{IP: record.IP}); err != nil {
-				log.Warnf("unable to delete IP %s: %s", record.IP.String(), err)
+
+			// Free the IP from the appropriate allocator
+			if p.useSubnetPools {
+				// Find which pool this IP belongs to
+				for cidr, pool := range p.subnetPoolMgr.Pools {
+					if pool.CIDR.Contains(record.IP) {
+						if err := pool.Allocator.Free(net.IPNet{IP: record.IP}); err != nil {
+							log.Warnf("unable to delete IP %s from subnet %s: %s", record.IP.String(), cidr, err)
+						}
+						break
+					}
+				}
+			} else {
+				if err := p.allocator.Free(net.IPNet{IP: record.IP}); err != nil {
+					log.Warnf("unable to delete IP %s: %s", record.IP.String(), err)
+				}
 			}
 			log.Printf("MAC %s already exists with IP %s, sending %s to reinitiate DHCP handshake", req.ClientHWAddr.String(), record.IP, dhcpv4.MessageTypeNak)
 		}

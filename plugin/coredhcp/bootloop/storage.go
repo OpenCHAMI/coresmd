@@ -10,11 +10,18 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
 func loadDB(path string) (*sql.DB, error) {
+	if dir := filepath.Dir(path); dir != "" {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create lease database directory %s: %w", dir, err)
+		}
+	}
 	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s", path))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database (%T): %w", err, err)

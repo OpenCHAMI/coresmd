@@ -168,6 +168,101 @@ func TestConfigValidate_DefaultsApplied(t *testing.T) {
 	}
 }
 
+func TestParseConfig_Subnet(t *testing.T) {
+	base := []string{
+		"svc_base_uri=https://svc.example.test",
+		"ipxe_base_uri=https://ipxe.example.test",
+	}
+
+	// Valid single subnet
+	args := append(append([]string{}, base...), "subnet=10.40.1.0/24,10.40.1.1")
+	cfg, errs := parseConfig(args...)
+	if len(errs) != 0 {
+		t.Fatalf("valid subnet: unexpected errors: %v", errs)
+	}
+	if cfg.subnetContext == nil {
+		t.Fatal("valid subnet: subnetContext is nil")
+	}
+	if cfg.subnetContext.Count() != 1 {
+		t.Fatalf("valid subnet: count=%d, want 1", cfg.subnetContext.Count())
+	}
+
+	// Valid multiple subnets
+	args = append(append([]string{}, base...),
+		"subnet=10.40.1.0/24,10.40.1.1",
+		"subnet=10.40.3.0/24,10.40.3.1",
+	)
+	cfg, errs = parseConfig(args...)
+	if len(errs) != 0 {
+		t.Fatalf("multiple subnets: unexpected errors: %v", errs)
+	}
+	if cfg.subnetContext.Count() != 2 {
+		t.Fatalf("multiple subnets: count=%d, want 2", cfg.subnetContext.Count())
+	}
+
+	// Invalid CIDR
+	args = append(append([]string{}, base...), "subnet=invalid,10.40.1.1")
+	_, errs = parseConfig(args...)
+	if len(errs) == 0 {
+		t.Fatal("invalid CIDR: expected error")
+	}
+
+	// Invalid router
+	args = append(append([]string{}, base...), "subnet=10.40.1.0/24,invalid")
+	_, errs = parseConfig(args...)
+	if len(errs) == 0 {
+		t.Fatal("invalid router: expected error")
+	}
+
+	// Router outside subnet
+	args = append(append([]string{}, base...), "subnet=10.40.1.0/24,10.40.2.1")
+	_, errs = parseConfig(args...)
+	if len(errs) == 0 {
+		t.Fatal("router outside subnet: expected error")
+	}
+
+	// Invalid format (missing router)
+	args = append(append([]string{}, base...), "subnet=10.40.1.0/24")
+	_, errs = parseConfig(args...)
+	if len(errs) == 0 {
+		t.Fatal("missing router: expected error")
+	}
+}
+
+func TestParseConfig_SubnetWithRules(t *testing.T) {
+	args := []string{
+		"svc_base_uri=https://svc.example.test",
+		"ipxe_base_uri=https://ipxe.example.test",
+		"subnet=10.40.1.0/24,10.40.1.1",
+		"subnet=10.40.3.0/24,10.40.3.1",
+		"rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24",
+		"rule=subnet:10.40.3.0/24,type:Node,hostname:storage-{04d},routers:10.40.3.1,cidr:24",
+		"rule=type:NodeBMC,hostname:bmc{04d}",
+	}
+
+	cfg, errs := parseConfig(args...)
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if cfg.subnetContext == nil || cfg.subnetContext.Count() != 2 {
+		t.Fatalf("expected 2 subnets in context, got %v", cfg.subnetContext)
+	}
+	if len(cfg.rules) != 3 {
+		t.Fatalf("expected 3 rules, got %d", len(cfg.rules))
+	}
+	// Verify first rule has subnet match and router action
+	r := cfg.rules[0]
+	if len(r.Match.Subnets) != 1 {
+		t.Fatalf("rule[0] expected 1 subnet match, got %d", len(r.Match.Subnets))
+	}
+	if len(r.Action.Routers) != 1 {
+		t.Fatalf("rule[0] expected 1 router, got %d", len(r.Action.Routers))
+	}
+	if ones, _ := r.Action.Netmask.Size(); ones != 24 {
+		t.Fatalf("rule[0] expected /24 netmask, got /%d", ones)
+	}
+}
+
 func TestSetup6_InvalidConfigFails(t *testing.T) {
 	if Plugin.Setup6 == nil {
 		t.Fatal("Plugin.Setup6 is nil")

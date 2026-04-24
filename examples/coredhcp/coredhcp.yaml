@@ -142,7 +142,18 @@ server4:
     #   keys are optional (type/subnet/id). If no rule sets a hostname, CoreSMD
     #   falls back to the built-in default hostname pattern "unknown-{04d}".
     #
-    #   See examples/coredhcp/hostnames.md for details and advanced examples.
+    #   See examples/coredhcp/rules.md for details and advanced examples.
+    #
+    # subnet (OPTIONAL, string, repeatable)
+    #   Configures a subnet for subnet-aware IP selection using the DHCP relay
+    #   agent's giaddr. Format: subnet=CIDR,ROUTER
+    #
+    #   When configured, CoreSMD uses giaddr to determine which subnet the
+    #   request came from, filters IP addresses to that subnet, and sets
+    #   baseline router (option 3) and netmask (option 1) values.
+    #
+    #   Rule-level actions (routers:, netmask:, cidr:) override these baselines.
+    #   See examples/coredhcp/rules.md for the full interaction details.
     #
     # lease_time (OPTIONAL, string, default=1h)
     #   The time duration that the served leases are valid. If omitted, the
@@ -191,6 +202,30 @@ server4:
         rule=type:HSNSwitch,hostname:{id}
         /* OPTIONAL: override built-in fallback (default is unknown-{04d}) */
         rule=hostname:unknown-{04d}
+
+    # MULTI-SUBNET EXAMPLE
+    #
+    # The following example shows a multi-subnet configuration where the DHCP
+    # server serves two subnets with different hostnames and routers. The
+    # subnet= directive enables giaddr-based IP selection. Rules with subnet:
+    # match keys provide per-subnet hostnames, routers, and netmasks.
+    #
+    # - coresmd: |
+    #     svc_base_uri=https://foobar.openchami.cluster
+    #     ipxe_base_uri=http://172.16.0.253:8081
+    #     ca_cert=/root_ca/root_ca.crt
+    #     cache_valid=30s
+    #     lease_time=1h
+    #     domain=openchami.cluster
+    #     rule_log=info
+    #     /* Enable subnet-aware IP selection via giaddr */
+    #     subnet=10.40.1.0/24,10.40.1.1
+    #     subnet=10.40.3.0/24,10.40.3.1
+    #     /* Per-subnet rules with hostname, router, and netmask actions */
+    #     rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24
+    #     rule=subnet:10.40.3.0/24,type:Node,hostname:storage-{04d},routers:10.40.3.1,cidr:24
+    #     rule=type:NodeBMC,hostname:bmc{04d}
+    #     rule=hostname:unknown-{04d}
 
     # Any requests reaching this point are unknown to SMD and it is up to the
     # administrator to decide how to handle unknown packets.
