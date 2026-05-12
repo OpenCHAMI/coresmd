@@ -51,6 +51,7 @@ match filters.
     - [7. Suppress domain suffix for selected hosts](#7-suppress-domain-suffix-for-selected-hosts)
     - [8. Hostname override with `continue`](#8-hostname-override-with-continue)
     - [9. Familiar "legacy-style" configuration, expressed as rules](#9-familiar-legacy-style-configuration-expressed-as-rules)
+  - [Multiple Subnet Support](#multiple-subnet-support)
   - [Caveats](#caveats)
   - [See Also](#see-also)
 
@@ -564,46 +565,37 @@ while preserving rule ordering and allowing additional matching criteria.
 
 ## Multiple Subnet Support
 
-CoreSMD provides two complementary mechanisms for multi-subnet environments:
+CoreSMD natively supports multi-subnet environments through rules with
+`subnet:` match keys. When any rule includes a `subnet:` match key, CoreSMD
+automatically becomes relay-aware: it uses the DHCP relay agent's giaddr to
+determine which subnet a request came from and filters the component's IP
+addresses to that subnet.
 
-### Config-Level `subnet=`
+### How It Works
 
-The `subnet=CIDR,ROUTER` directive configures subnet-aware IP selection and
-provides baseline DHCP options (router and netmask) based on the relay agent's
-giaddr:
+1. Rules with `subnet:CIDR` match keys register their CIDRs with CoreSMD
+2. When a DHCP request arrives with a non-zero giaddr, CoreSMD finds the
+   matching subnet and filters the component's IPs to that subnet
+3. Rule evaluation then sets DHCP options (hostname, routers, netmask) for
+   the matching subnet
 
-```yaml
-- coresmd: |
-    subnet=10.40.1.0/24,10.40.1.1
-    subnet=10.40.3.0/24,10.40.3.1
-```
-
-When configured, CoreSMD uses giaddr to determine which subnet the DHCP request
-came from, filters the component's IPs to those belonging to that subnet, and
-sets the corresponding router (option 3) and netmask (option 1).
-
-### Rule-Level `subnet:`
-
-Rules can also match on subnets and set per-rule routers and netmask:
+### Example
 
 ```yaml
 - coresmd: |
-    rule=subnet:10.40.1.0/24,hostname:compute-{04d},routers:10.40.1.1,cidr:24
-    rule=subnet:10.40.3.0/24,hostname:storage-{04d},routers:10.40.3.1,cidr:24
+    rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24
+    rule=subnet:10.40.3.0/24,type:Node,hostname:storage-{04d},routers:10.40.3.1,cidr:24
+    rule=type:NodeBMC,hostname:bmc{04d}
+    rule=hostname:unknown-{04d}
 ```
 
-### Order of Operations
-
-When both are configured:
-
-1. **Config-level `subnet=`** sets baseline router and netmask options
-2. **`rule=...` evaluation** runs after, and matching rules **override** the
-   baseline options via `resp.Options.Update()`
-
-This means rule-level actions always take precedence over config-level subnet
-settings. If you only need subnet-aware IP selection (giaddr filtering) without
-per-subnet hostnames, use `subnet=` alone. If you need per-subnet hostnames,
-routers, or netmasks, use rules with `subnet:` match keys.
+In this configuration:
+- Requests relayed from the 10.40.1.0/24 subnet get `compute-NNNN` hostnames,
+  router 10.40.1.1, and a /24 netmask
+- Requests relayed from the 10.40.3.0/24 subnet get `storage-NNNN` hostnames,
+  router 10.40.3.1, and a /24 netmask
+- BMC and fallback rules apply regardless of subnet
+- If no giaddr is present (direct connection), all IPs are considered
 
 ## Caveats
 

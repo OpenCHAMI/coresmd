@@ -52,6 +52,25 @@ func (sc *SubnetContext) AddSubnet(cidr string, router string) error {
 	return nil
 }
 
+// AddSubnetCIDROnly adds a subnet to the context using only the CIDR (no router).
+// This is used when building the SubnetContext from rule-level subnet: match
+// keys, where the router is set separately via rule actions.
+func (sc *SubnetContext) AddSubnetCIDROnly(cidr string) error {
+	_, ipnet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return fmt.Errorf("invalid CIDR %s: %w", cidr, err)
+	}
+
+	// Only add if not already present (avoid overwriting router-aware entries)
+	if _, exists := sc.Subnets[cidr]; !exists {
+		sc.Subnets[cidr] = &SubnetConfig{
+			CIDR: ipnet,
+		}
+	}
+
+	return nil
+}
+
 // FindSubnetForIP finds the subnet configuration that contains the given IP
 func (sc *SubnetContext) FindSubnetForIP(ip net.IP) (*SubnetConfig, string, error) {
 	if ip == nil {

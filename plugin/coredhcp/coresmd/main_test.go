@@ -168,64 +168,74 @@ func TestConfigValidate_DefaultsApplied(t *testing.T) {
 	}
 }
 
-func TestParseConfig_Subnet(t *testing.T) {
+func TestParseConfig_SubnetAutoBuiltFromRules(t *testing.T) {
 	base := []string{
 		"svc_base_uri=https://svc.example.test",
 		"ipxe_base_uri=https://ipxe.example.test",
 	}
 
-	// Valid single subnet
-	args := append(append([]string{}, base...), "subnet=10.40.1.0/24,10.40.1.1")
+	// Single rule with subnet match auto-builds SubnetContext
+	args := append(append([]string{}, base...),
+		"rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24",
+	)
 	cfg, errs := parseConfig(args...)
 	if len(errs) != 0 {
-		t.Fatalf("valid subnet: unexpected errors: %v", errs)
+		t.Fatalf("single rule with subnet: unexpected errors: %v", errs)
 	}
 	if cfg.subnetContext == nil {
-		t.Fatal("valid subnet: subnetContext is nil")
+		t.Fatal("single rule with subnet: subnetContext should be auto-built")
 	}
 	if cfg.subnetContext.Count() != 1 {
-		t.Fatalf("valid subnet: count=%d, want 1", cfg.subnetContext.Count())
+		t.Fatalf("single rule with subnet: count=%d, want 1", cfg.subnetContext.Count())
 	}
 
-	// Valid multiple subnets
+	// Multiple rules with different subnets
 	args = append(append([]string{}, base...),
-		"subnet=10.40.1.0/24,10.40.1.1",
-		"subnet=10.40.3.0/24,10.40.3.1",
+		"rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24",
+		"rule=subnet:10.40.3.0/24,type:Node,hostname:storage-{04d},routers:10.40.3.1,cidr:24",
 	)
 	cfg, errs = parseConfig(args...)
 	if len(errs) != 0 {
-		t.Fatalf("multiple subnets: unexpected errors: %v", errs)
+		t.Fatalf("multiple rules with subnets: unexpected errors: %v", errs)
+	}
+	if cfg.subnetContext == nil {
+		t.Fatal("multiple rules with subnets: subnetContext should be auto-built")
 	}
 	if cfg.subnetContext.Count() != 2 {
-		t.Fatalf("multiple subnets: count=%d, want 2", cfg.subnetContext.Count())
+		t.Fatalf("multiple rules with subnets: count=%d, want 2", cfg.subnetContext.Count())
 	}
 
-	// Invalid CIDR
-	args = append(append([]string{}, base...), "subnet=invalid,10.40.1.1")
-	_, errs = parseConfig(args...)
-	if len(errs) == 0 {
-		t.Fatal("invalid CIDR: expected error")
+	// Duplicate subnet across rules should not double-count
+	args = append(append([]string{}, base...),
+		"rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24",
+		"rule=subnet:10.40.1.0/24,type:NodeBMC,hostname:bmc-{04d}",
+	)
+	cfg, errs = parseConfig(args...)
+	if len(errs) != 0 {
+		t.Fatalf("duplicate subnet rules: unexpected errors: %v", errs)
+	}
+	if cfg.subnetContext.Count() != 1 {
+		t.Fatalf("duplicate subnet rules: count=%d, want 1", cfg.subnetContext.Count())
 	}
 
-	// Invalid router
-	args = append(append([]string{}, base...), "subnet=10.40.1.0/24,invalid")
-	_, errs = parseConfig(args...)
-	if len(errs) == 0 {
-		t.Fatal("invalid router: expected error")
+	// Rules without subnet match should not create SubnetContext
+	args = append(append([]string{}, base...),
+		"rule=type:Node,hostname:nid{04d}",
+		"rule=type:NodeBMC,hostname:bmc{04d}",
+	)
+	cfg, errs = parseConfig(args...)
+	if len(errs) != 0 {
+		t.Fatalf("rules without subnet: unexpected errors: %v", errs)
+	}
+	if cfg.subnetContext != nil {
+		t.Fatal("rules without subnet: subnetContext should be nil")
 	}
 
-	// Router outside subnet
-	args = append(append([]string{}, base...), "subnet=10.40.1.0/24,10.40.2.1")
+	// subnet= as a config key is now unknown
+	args = append(append([]string{}, base...), "subnet=10.40.1.0/24,10.40.1.1")
 	_, errs = parseConfig(args...)
 	if len(errs) == 0 {
-		t.Fatal("router outside subnet: expected error")
-	}
-
-	// Invalid format (missing router)
-	args = append(append([]string{}, base...), "subnet=10.40.1.0/24")
-	_, errs = parseConfig(args...)
-	if len(errs) == 0 {
-		t.Fatal("missing router: expected error")
+		t.Fatal("subnet= config key should be rejected as unknown")
 	}
 }
 
@@ -233,8 +243,6 @@ func TestParseConfig_SubnetWithRules(t *testing.T) {
 	args := []string{
 		"svc_base_uri=https://svc.example.test",
 		"ipxe_base_uri=https://ipxe.example.test",
-		"subnet=10.40.1.0/24,10.40.1.1",
-		"subnet=10.40.3.0/24,10.40.3.1",
 		"rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24",
 		"rule=subnet:10.40.3.0/24,type:Node,hostname:storage-{04d},routers:10.40.3.1,cidr:24",
 		"rule=type:NodeBMC,hostname:bmc{04d}",

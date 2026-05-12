@@ -144,17 +144,6 @@ server4:
     #
     #   See examples/coredhcp/rules.md for details and advanced examples.
     #
-    # subnet (OPTIONAL, string, repeatable)
-    #   Configures a subnet for subnet-aware IP selection using the DHCP relay
-    #   agent's giaddr. Format: subnet=CIDR,ROUTER
-    #
-    #   When configured, CoreSMD uses giaddr to determine which subnet the
-    #   request came from, filters IP addresses to that subnet, and sets
-    #   baseline router (option 3) and netmask (option 1) values.
-    #
-    #   Rule-level actions (routers:, netmask:, cidr:) override these baselines.
-    #   See examples/coredhcp/rules.md for the full interaction details.
-    #
     # lease_time (OPTIONAL, string, default=1h)
     #   The time duration that the served leases are valid. If omitted, the
     #   default value will be used.
@@ -206,9 +195,10 @@ server4:
     # MULTI-SUBNET EXAMPLE
     #
     # The following example shows a multi-subnet configuration where the DHCP
-    # server serves two subnets with different hostnames and routers. The
-    # subnet= directive enables giaddr-based IP selection. Rules with subnet:
-    # match keys provide per-subnet hostnames, routers, and netmasks.
+    # server serves two subnets with different hostnames and routers. CoreSMD
+    # automatically becomes relay-aware (giaddr-based IP selection) when rules
+    # contain subnet: match keys. Rules set per-subnet routers and netmasks
+    # via routers: and cidr: action keys.
     #
     # - coresmd: |
     #     svc_base_uri=https://foobar.openchami.cluster
@@ -218,10 +208,7 @@ server4:
     #     lease_time=1h
     #     domain=openchami.cluster
     #     rule_log=info
-    #     /* Enable subnet-aware IP selection via giaddr */
-    #     subnet=10.40.1.0/24,10.40.1.1
-    #     subnet=10.40.3.0/24,10.40.3.1
-    #     /* Per-subnet rules with hostname, router, and netmask actions */
+    #     /* Per-subnet rules: subnet: enables giaddr-aware IP filtering */
     #     rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24
     #     rule=subnet:10.40.3.0/24,type:Node,hostname:storage-{04d},routers:10.40.3.1,cidr:24
     #     rule=type:NodeBMC,hostname:bmc{04d}

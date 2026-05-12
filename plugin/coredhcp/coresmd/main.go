@@ -44,7 +44,7 @@ type Config struct {
 	domain        string                // domain
 	ruleLog       string                // rule_log
 	rules         []rule.Rule           // rule
-	subnetContext *subnet.SubnetContext // subnet configuration
+	subnetContext *subnet.SubnetContext // auto-built from rule subnet: match keys
 }
 
 func (c Config) String() string {
@@ -74,10 +74,9 @@ const (
 )
 
 var (
-	smdCache      *cache.Cache
-	globalConfig  Config
-	subnetContext *subnet.SubnetContext
-	log           = logger.GetLogger("plugins/coresmd")
+	smdCache     *cache.Cache
+	globalConfig Config
+	log          = logger.GetLogger("plugins/coresmd")
 )
 
 var Plugin = plugins.Plugin{
@@ -344,21 +343,6 @@ func parseConfig(argv ...string) (cfg Config, errs []error) {
 				continue
 			}
 			cfg.rules = append(cfg.rules, rule)
-		case "subnet":
-			if cfg.subnetContext == nil {
-				cfg.subnetContext = subnet.NewSubnetContext()
-			}
-			parts := strings.Split(opt[1], ",")
-			if len(parts) != 2 {
-				errs = append(errs, fmt.Errorf("non-comment arg %d: %s: invalid format '%s', expected 'cidr,router' (skipping)", idx, opt[0], opt[1]))
-				continue
-			}
-			cidr := strings.TrimSpace(parts[0])
-			router := strings.TrimSpace(parts[1])
-			if err := cfg.subnetContext.AddSubnet(cidr, router); err != nil {
-				errs = append(errs, fmt.Errorf("non-comment arg %d: %s: failed to add subnet: %w", idx, opt[0], err))
-				continue
-			}
 		default:
 			errs = append(errs, fmt.Errorf("non-comment arg %d: unknown config key '%s' (skipping)", idx, opt[0]))
 			continue
@@ -367,6 +351,22 @@ func parseConfig(argv ...string) (cfg Config, errs []error) {
 	if insideComment {
 		errs = append(errs, fmt.Errorf("arg %d: unterminated comment (\"/*\" found without a \"*/\")", commentIdx))
 	}
+
+	// Auto-build SubnetContext from rule-level subnet: match keys.
+	// This makes coresmd relay-aware natively without a separate subnet=
+	// config directive. Rules set DHCP options (routers, netmask) directly.
+	for _, r := range cfg.rules {
+		for _, sn := range r.Match.Subnets {
+			if cfg.subnetContext == nil {
+				cfg.subnetContext = subnet.NewSubnetContext()
+			}
+			cidr := sn.String()
+			if err := cfg.subnetContext.AddSubnetCIDROnly(cidr); err != nil {
+				errs = append(errs, fmt.Errorf("failed to register subnet %s from rule: %w", cidr, err))
+			}
+		}
+	}
+
 	return
 }
 
@@ -467,25 +467,6 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 		log.Errorf("lease time unset in global config! unable to set lease time in DHCPv4 response to %s", ifaceInfo.MAC)
 	} else {
 		resp.Options.Update(dhcpv4.OptIPAddressLeaseTime(*globalConfig.leaseTime))
-	}
-
-	// Set subnet-specific router and netmask if config-level subnet= is set.
-	//
-	// NOTE: These DHCP options may be overridden by rule-level actions below
-	// (e.g. rule=subnet:...,routers:...,netmask:...). Config-level subnet=
-	// provides baseline values; rule-level actions take precedence because
-	// Evaluate4 runs after this block and calls resp.Options.Update().
-	if globalConfig.subnetContext != nil && !globalConfig.subnetContext.IsEmpty() {
-		subnetConfig, cidr, err := globalConfig.subnetContext.FindSubnetForIP(assignedIP)
-		if err == nil {
-			log.Debugf("setting router %s for subnet %s", subnetConfig.Router, cidr)
-			resp.Options.Update(dhcpv4.OptRouter(subnetConfig.Router))
-
-			// Set subnet mask based on CIDR
-			resp.Options.Update(dhcpv4.OptSubnetMask(subnetConfig.CIDR.Mask))
-		} else {
-			log.Warnf("assigned IP %s not in any configured subnet: %v", assignedIP, err)
-		}
 	}
 
 	// Apply rules
