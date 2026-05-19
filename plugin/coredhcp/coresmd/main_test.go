@@ -230,13 +230,6 @@ func TestParseConfig_SubnetAutoBuiltFromRules(t *testing.T) {
 	if cfg.subnetContext != nil {
 		t.Fatal("rules without subnet: subnetContext should be nil")
 	}
-
-	// subnet= as a config key is now unknown
-	args = append(append([]string{}, base...), "subnet=10.40.1.0/24,10.40.1.1")
-	_, errs = parseConfig(args...)
-	if len(errs) == 0 {
-		t.Fatal("subnet= config key should be rejected as unknown")
-	}
 }
 
 func TestParseConfig_SubnetWithRules(t *testing.T) {

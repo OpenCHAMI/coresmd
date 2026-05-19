@@ -58,6 +58,13 @@ func TestSubnetPoolManager_AddPool(t *testing.T) {
 			endIP:     "10.40.2.200",
 			wantError: true,
 		},
+		{
+			name:      "start IP after end IP",
+			cidr:      "10.40.1.0/24",
+			startIP:   "10.40.1.200",
+			endIP:     "10.40.1.10",
+			wantError: true,
+		},
 	}
 
 	for _, tt := range tests {

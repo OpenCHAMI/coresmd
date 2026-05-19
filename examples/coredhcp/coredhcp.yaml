@@ -274,9 +274,11 @@ server4:
     #   time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
     #
     # ipv4_start (REQUIRED, string)
+    #   DEPRECATED: Use subnet_pool instead.
     #   The start IPv4 address for the pool of IPs to assign.
     #
     # ipv4_end (REQUIRED, string)
+    #   DEPRECATED: Use subnet_pool instead.
     #   The end IPv4 address for the pool of IPs to assign.
     - bootloop: |
         /* file to store DHCP leases in */

@@ -9,25 +9,38 @@ import (
 	"net"
 )
 
-// SubnetConfig represents a single subnet configuration with its CIDR and router
+// SubnetConfig represents a single subnet configuration with its CIDR and router.
 type SubnetConfig struct {
-	CIDR   *net.IPNet
+	// CIDR is the parsed subnet in CIDR notation (e.g., "10.40.1.0/24").
+	CIDR *net.IPNet
+	// Router is the gateway IP for this subnet (e.g., net.ParseIP("10.40.1.1")).
+	// It may be nil when the subnet is auto-built from rule-level subnet: match
+	// keys without an explicit router.
 	Router net.IP
 }
 
-// SubnetContext provides subnet-aware context for DHCP operations
+// SubnetContext holds the set of subnets the DHCP server is responsible for
+// and provides lookup helpers used during packet processing. A map keyed by
+// CIDR string (e.g., "10.40.1.0/24") is used so that subnet lookups by CIDR
+// are O(1) and duplicate registration is trivially prevented.
 type SubnetContext struct {
-	Subnets map[string]*SubnetConfig // key: CIDR string (e.g., "10.40.1.0/24")
+	// Subnets maps a CIDR string (e.g., "10.40.1.0/24") to its configuration.
+	Subnets map[string]*SubnetConfig
 }
 
-// NewSubnetContext creates a new SubnetContext
+// NewSubnetContext creates a new, empty SubnetContext with no subnets
+// registered. Use AddSubnet or AddSubnetCIDROnly to populate it.
 func NewSubnetContext() *SubnetContext {
 	return &SubnetContext{
 		Subnets: make(map[string]*SubnetConfig),
 	}
 }
 
-// AddSubnet adds a subnet configuration to the context
+// AddSubnet registers a subnet in the context.
+//
+//   - cidr: the subnet in CIDR notation, e.g. "10.40.1.0/24".
+//   - router: the gateway IP for the subnet, e.g. "10.40.1.1".
+//     Must be an address within cidr.
 func (sc *SubnetContext) AddSubnet(cidr string, router string) error {
 	_, ipnet, err := net.ParseCIDR(cidr)
 	if err != nil {
@@ -71,7 +84,8 @@ func (sc *SubnetContext) AddSubnetCIDROnly(cidr string) error {
 	return nil
 }
 
-// FindSubnetForIP finds the subnet configuration that contains the given IP
+// FindSubnetForIP returns the SubnetConfig and CIDR string for the subnet
+// that contains ip. Returns an error if ip is nil or no subnet matches.
 func (sc *SubnetContext) FindSubnetForIP(ip net.IP) (*SubnetConfig, string, error) {
 	if ip == nil {
 		return nil, "", fmt.Errorf("IP address is nil")
@@ -86,7 +100,9 @@ func (sc *SubnetContext) FindSubnetForIP(ip net.IP) (*SubnetConfig, string, erro
 	return nil, "", fmt.Errorf("no subnet found for IP %s", ip.String())
 }
 
-// MatchInterfaceToSubnet checks if an interface IP belongs to a specific subnet
+// MatchInterfaceToSubnet reports whether ifaceIP belongs to the same subnet
+// as giaddr. If giaddr is nil or unspecified (no relay agent), any interface
+// is considered a match.
 func (sc *SubnetContext) MatchInterfaceToSubnet(ifaceIP net.IP, giaddr net.IP) bool {
 	if giaddr == nil || giaddr.IsUnspecified() {
 		// No relay agent, match any interface
@@ -112,7 +128,9 @@ func (sc *SubnetContext) GetRouterForSubnet(cidr string) (net.IP, error) {
 	return config.Router, nil
 }
 
-// GetSubnetForGiaddr returns the subnet configuration for a given giaddr
+// GetSubnetForGiaddr returns the SubnetConfig and CIDR string for the subnet
+// containing giaddr. Returns an error if giaddr is nil, unspecified, or not
+// found in any registered subnet.
 func (sc *SubnetContext) GetSubnetForGiaddr(giaddr net.IP) (*SubnetConfig, string, error) {
 	if giaddr == nil || giaddr.IsUnspecified() {
 		return nil, "", fmt.Errorf("giaddr is nil or unspecified")

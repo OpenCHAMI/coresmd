@@ -91,6 +91,13 @@ ifeq ($(CONTAINER_PROG),)
 endif
 	$(CONTAINER_PROG) build -t $(FQCN) .
 
+.PHONY: container-multistage
+container-multistage: ## Build container using multi-stage Dockerfile
+ifeq ($(CONTAINER_PROG),)
+	$(error specified container command ($(CONTAINER_PROG)) not found)
+endif
+	$(CONTAINER_PROG) build -t $(FQCN) -f Dockerfile.build .
+
 .PHONY: help
 help: ## Show this help
 ifeq ($(AWK),)

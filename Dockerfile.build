@@ -1,4 +1,3 @@
-# SPDX-FileCopyrightText: © 2024-2025 Triad National Security, LLC.
 # SPDX-FileCopyrightText: © 2026 OpenCHAMI a Series of LF Projects, LLC
 #
 # SPDX-License-Identifier: MIT
@@ -15,38 +14,12 @@ WORKDIR /build
 # Set GOTOOLCHAIN to auto to allow Go to download required version
 ENV GOTOOLCHAIN=auto
 
-# Copy go mod files
-COPY go.mod go.sum ./
-
-# Download dependencies
-RUN go mod download
-
 # Copy source code
 COPY . .
 
-# Install coredhcp-generator
+# Install coredhcp-generator and build binaries using the Makefile
 RUN go install github.com/coredhcp/coredhcp/cmds/coredhcp-generator@latest
-
-# Build coredhcp with coresmd and bootloop plugins using the template
-RUN coredhcp-generator \
-    -t generator/coredhcp/coredhcp.go.template \
-    -f generator/coredhcp/plugins.txt \
-    -o build/coredhcp/coredhcp.go \
-    github.com/openchami/coresmd/plugin/coredhcp/coresmd \
-    github.com/openchami/coresmd/plugin/coredhcp/bootloop
-
-# Tidy go modules after generation
-RUN go mod tidy
-
-# Build the coredhcp binary
-RUN go build -v -o coredhcp ./build/coredhcp
-
-# Build coredns if it exists
-RUN if [ -f "build/coredns/main.go" ]; then \
-        go build -v -o coredns ./build/coredns; \
-    else \
-        touch coredns && chmod +x coredns; \
-    fi
+RUN make binaries
 
 # Stage 2: Runtime image
 FROM docker.io/chainguard/wolfi-base:latest
