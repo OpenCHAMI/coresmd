@@ -32,6 +32,7 @@ var AllowedKeys = []string{
 	"hostname",
 	"id",
 	"id_set",
+	"ignore",
 	"log",
 	"name",
 	"netmask",
@@ -184,6 +185,7 @@ type Action struct {
 	Netmask      net.IPMask // rule-specific network mask for IPv4
 	Routers      []net.IP   // router IPs for selected component(s)
 	Continue     bool       // whether to continue parsing subsequent rules if this matches
+	Ignore       bool       // if true, drop DHCP request without responding (takes precedence over all other actions)
 }
 
 func (a Action) String() string {
@@ -203,6 +205,7 @@ func (a Action) String() string {
 		actionStr += fmt.Sprintf(",domain_append:%s", da)
 	}
 	actionStr += fmt.Sprintf(",continue:%v", a.Continue)
+	actionStr += fmt.Sprintf(",ignore:%v", a.Ignore)
 
 	// Canonicalize netmask for IPv4 to CIDR notation
 	if ones, _ := a.Netmask.Size(); ones > 0 {
@@ -357,6 +360,15 @@ func ParseRule(rule string) (Rule, error) {
 		}
 	}
 
+	// ignore (optional, defaults to false)
+	if ignore, ok := comps["ignore"]; ok && ignore != "" {
+		if b, err := parse.ParseBoolLoose(ignore); err != nil {
+			return Rule{}, NewErrInvalidValue("ignore", ignore, "boolean")
+		} else {
+			a.Ignore = b
+		}
+	}
+
 	// domain_append (optional)
 	//
 	// Valid values:
@@ -432,10 +444,13 @@ func ParseRule(rule string) (Rule, error) {
 	// Netmask can be set explicitly via netmask/cidr or implicitly from subnet.
 	// In this way, subnet can be considered an "action" and is the only match
 	// key to be considered such.
+	//
+	// The ignore action is also valid as a standalone action.
 	if strings.TrimSpace(a.Hostname) == "" &&
-		len(a.Routers) == 0 {
+		len(a.Routers) == 0 &&
+		!a.Ignore {
 		if ones, size := a.Netmask.Size(); ones == 0 || size == 0 {
-			return Rule{}, NewErrRequiredKeys("hostname", "routers", "netmask")
+			return Rule{}, NewErrRequiredKeys("hostname", "routers", "netmask", "ignore")
 		}
 	}
 
@@ -554,7 +569,10 @@ func normalizeDomainAppend(raw string) (string, error) {
 //
 // The global settings globalDomain and ruleLog are also passed for effecting
 // rule evaluation behavior.
-func Evaluate4(logger *logrus.Entry, ii iface.IfaceInfo, globalDomain, ruleLog string, resp *dhcpv4.DHCPv4, rules []Rule) {
+//
+// Returns true if a DHCP response should be sent, false if the request should
+// be dropped (due to an ignore action).
+func Evaluate4(logger *logrus.Entry, ii iface.IfaceInfo, globalDomain, ruleLog string, resp *dhcpv4.DHCPv4, rules []Rule) bool {
 	// Init default logger if unset
 	if logger == nil {
 		logger = logrus.NewEntry(logrus.New())
@@ -628,6 +646,29 @@ func Evaluate4(logger *logrus.Entry, ii iface.IfaceInfo, globalDomain, ruleLog s
 			//
 			// PERFORM ACTIONS HERE
 			//
+
+			// Check if request should be ignored (takes precedence over all other actions)
+			if rule.Action.Ignore {
+				// Log according to rule's log level
+				var loggingEnabled bool
+				switch rule.Log {
+				case "info", "debug":
+					loggingEnabled = true
+				case "", "none":
+					// Inherit from global or suppress
+					if ruleLog == "info" || ruleLog == "debug" {
+						loggingEnabled = true
+					}
+				}
+				if loggingEnabled {
+					logger.WithFields(logrus.Fields{
+						"comp_id":   ii.CompID,
+						"comp_type": ii.Type,
+						"mac":       ii.MAC,
+					}).Infof("rule[%d] (%s) matched with ignore=true, dropping DHCP request", idx, rule.Name)
+				}
+				return false // Do not send DHCP response to client
+			}
 
 			// Set hostname
 			if hn := strings.TrimSpace(rule.Action.Hostname); hn != "" {
@@ -675,6 +716,8 @@ func Evaluate4(logger *logrus.Entry, ii iface.IfaceInfo, globalDomain, ruleLog s
 	if len(bytes.TrimSpace(resp.Options.Get(dhcpv4.OptionHostName))) == 0 {
 		resp.Options.Update(dhcpv4.OptHostName(lookupHostname(DefaultPattern, globalDomain, ii, Rule{})))
 	}
+
+	return true // Send DHCP response to client
 }
 
 // Evaluate6 takes interface information from a DHCPv6 request and a list of
@@ -686,7 +729,10 @@ func Evaluate4(logger *logrus.Entry, ii iface.IfaceInfo, globalDomain, ruleLog s
 //
 // The global settings globalDomain and ruleLog are also passed for effecting
 // rule evaluation behavior.
-func Evaluate6(logger *logrus.Entry, ii iface.IfaceInfo, globalDomain, ruleLog string, resp *dhcpv6.Message, rules []Rule) {
+//
+// Returns true if a DHCP response should be sent, false if the request should
+// be dropped (due to an ignore action).
+func Evaluate6(logger *logrus.Entry, ii iface.IfaceInfo, globalDomain, ruleLog string, resp *dhcpv6.Message, rules []Rule) bool {
 	// Init default logger if unset
 	if logger == nil {
 		logger = logrus.NewEntry(logrus.New())
@@ -761,6 +807,29 @@ func Evaluate6(logger *logrus.Entry, ii iface.IfaceInfo, globalDomain, ruleLog s
 			// PERFORM ACTIONS HERE
 			//
 
+			// Check if request should be ignored (takes precedence over all other actions)
+			if rule.Action.Ignore {
+				// Log according to rule's log level
+				var loggingEnabled bool
+				switch rule.Log {
+				case "info", "debug":
+					loggingEnabled = true
+				case "", "none":
+					// Inherit from global or suppress
+					if ruleLog == "info" || ruleLog == "debug" {
+						loggingEnabled = true
+					}
+				}
+				if loggingEnabled {
+					logger.WithFields(logrus.Fields{
+						"comp_id":   ii.CompID,
+						"comp_type": ii.Type,
+						"mac":       ii.MAC,
+					}).Infof("rule[%d] (%s) matched with ignore=true, dropping DHCPv6 request", idx, rule.Name)
+				}
+				return false // Do not send a DHCP response to client
+			}
+
 			// Set hostname
 			if hn := strings.TrimSpace(rule.Action.Hostname); hn != "" {
 				hname := lookupHostname(hn, globalDomain, ii, rule)
@@ -788,6 +857,8 @@ func Evaluate6(logger *logrus.Entry, ii iface.IfaceInfo, globalDomain, ruleLog s
 		labels := &rfc1035label.Labels{Labels: strings.Split(hname, ".")}
 		resp.UpdateOption(&dhcpv6.OptFQDN{Flags: 0, DomainName: labels})
 	}
+
+	return true // Send DHCP response to client
 }
 
 // createRuleCompDict parses a rule string and creates a map of each rule

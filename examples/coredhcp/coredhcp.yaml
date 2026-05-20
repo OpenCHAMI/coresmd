@@ -138,9 +138,21 @@ server4:
     #
     # rule (OPTIONAL, string, repeatable)
     #   Adds a rule. Rules are evaluated in order. A matching rule may set the
-    #   hostname (`hostname:...`) and/or DHCPv4 routers (`routers:...`). Match
-    #   keys are optional (type/subnet/id). If no rule sets a hostname, CoreSMD
-    #   falls back to the built-in default hostname pattern "unknown-{04d}".
+    #   hostname (`hostname:...`) and/or DHCPv4 routers (`routers:...`), or
+    #   drop the request (`ignore:true`). Match keys are optional (type/subnet/id).
+    #   If no rule sets a hostname, CoreSMD falls back to the built-in default
+    #   hostname pattern "unknown-{04d}".
+    #
+    #   Action keys:
+    #   - hostname:PATTERN - Set hostname (supports {04d}, {id} placeholders)
+    #   - routers:IP[|IP...] - Set DHCPv4 router option
+    #   - netmask:MASK or cidr:BITS - Set DHCPv4 subnet mask
+    #   - ignore:{true|false} - Drop DHCP request without responding (takes precedence)
+    #   - continue:{true|false} - Continue evaluating subsequent rules after match
+    #   - domain:DOMAIN - Override global domain for this rule
+    #   - domain_append:MODE - Control domain suffixing behavior
+    #   - log:{info|debug|none} - Per-rule logging override
+    #   - name:STRING - Rule identifier for logs
     #
     #   See examples/coredhcp/rules.md for details and advanced examples.
     #
@@ -189,6 +201,9 @@ server4:
         rule=type:Node,hostname:nid{04d}
         rule=type:NodeBMC,hostname:bmc{04d}
         rule=type:HSNSwitch,hostname:{id}
+        /* OPTIONAL: Drop DHCP requests for specific components/subnets */
+        /* rule=type:RouterBMC,ignore:true,log:info */
+        /* rule=subnet:172.16.99.0/24,ignore:true */
         /* OPTIONAL: override built-in fallback (default is unknown-{04d}) */
         rule=hostname:unknown-{04d}
 

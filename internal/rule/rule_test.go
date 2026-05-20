@@ -253,3 +253,191 @@ func TestEvaluate6_HostnameAndDefault(t *testing.T) {
 		t.Fatalf("expected=%q got=%q", "unknown-0007.cluster.local", got2)
 	}
 }
+
+// TestParseRule_Ignore tests parsing of the ignore action
+func TestParseRule_Ignore(t *testing.T) {
+	tests := []struct {
+		name       string
+		rule       string
+		wantIgnore bool
+		wantErr    bool
+	}{
+		{"ignore_true", "ignore:true", true, false},
+		{"ignore_false", "ignore:false,hostname:test", false, false},
+		{"ignore_yes", "ignore:yes", true, false},
+		{"ignore_no", "ignore:no,hostname:test", false, false},
+		{"ignore_1", "ignore:1", true, false},
+		{"ignore_0", "ignore:0,hostname:test", false, false},
+		{"ignore_invalid", "ignore:maybe,hostname:test", false, true},
+		{"ignore_with_subnet", "subnet:172.16.0.0/24,ignore:true", true, false},
+		{"ignore_with_type", "type:RouterBMC,ignore:true", true, false},
+		{"ignore_with_hostname", "type:Node,hostname:compute-{04d},ignore:true", true, false},
+		{"ignore_alone_valid", "ignore:true", true, false},
+		{"ignore_false_no_other_action", "ignore:false", false, true}, // Should fail validation
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, err := ParseRule(tt.rule)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ParseRule(%q): err=%v wantErr=%v", tt.rule, err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if r.Action.Ignore != tt.wantIgnore {
+				t.Fatalf("ParseRule(%q): got Ignore=%v want=%v", tt.rule, r.Action.Ignore, tt.wantIgnore)
+			}
+		})
+	}
+}
+
+// TestEvaluate4_Ignore tests that DHCPv4 requests are dropped when ignore=true
+func TestEvaluate4_Ignore(t *testing.T) {
+	// Test component info
+	ii := iface.IfaceInfo{
+		CompID:  "x3000c0s0b0n0",
+		CompNID: 5,
+		Type:    "Node",
+		MAC:     "de:ad:be:ef:00:01",
+		IPList:  []net.IP{net.ParseIP("172.16.0.10")},
+	}
+
+	// Create a DHCPv4 response
+	resp, err := dhcpv4.NewReplyFromRequest(&dhcpv4.DHCPv4{})
+	if err != nil {
+		t.Fatalf("failed to create DHCPv4 response: %v", err)
+	}
+
+	t.Run("ignore_true_drops_request", func(t *testing.T) {
+		rules := []Rule{{
+			Name:   "drop_all",
+			Match:  Match{Types: map[string]bool{"Node": true}},
+			Action: Action{Ignore: true},
+		}}
+
+		shouldRespond := Evaluate4(nil, ii, "test.local", "info", resp, rules)
+		if shouldRespond {
+			t.Fatalf("expected shouldRespond=false got=true")
+		}
+
+		// Verify no hostname was set (request dropped before actions)
+		if len(resp.Options.Get(dhcpv4.OptionHostName)) > 0 {
+			t.Fatalf("expected no hostname to be set when ignored")
+		}
+	})
+
+	t.Run("ignore_false_allows_request", func(t *testing.T) {
+		resp2, _ := dhcpv4.NewReplyFromRequest(&dhcpv4.DHCPv4{})
+		rules := []Rule{{
+			Name:   "allow_with_hostname",
+			Match:  Match{Types: map[string]bool{"Node": true}},
+			Action: Action{Ignore: false, Hostname: "test-{04d}"},
+		}}
+
+		shouldRespond := Evaluate4(nil, ii, "test.local", "info", resp2, rules)
+		if !shouldRespond {
+			t.Fatalf("expected shouldRespond=true got=false")
+		}
+
+		// Verify hostname was set
+		hostname := string(resp2.Options.Get(dhcpv4.OptionHostName))
+		if !strings.HasPrefix(hostname, "test-") {
+			t.Fatalf("expected hostname to be set, got=%q", hostname)
+		}
+	})
+
+	t.Run("ignore_takes_precedence", func(t *testing.T) {
+		resp3, _ := dhcpv4.NewReplyFromRequest(&dhcpv4.DHCPv4{})
+		rules := []Rule{{
+			Name:   "ignore_with_other_actions",
+			Match:  Match{Types: map[string]bool{"Node": true}},
+			Action: Action{Ignore: true, Hostname: "should-not-set"},
+		}}
+
+		shouldRespond := Evaluate4(nil, ii, "test.local", "info", resp3, rules)
+		if shouldRespond {
+			t.Fatalf("expected shouldRespond=false (ignore takes precedence)")
+		}
+
+		// Verify hostname was NOT set
+		if len(resp3.Options.Get(dhcpv4.OptionHostName)) > 0 {
+			t.Fatalf("expected no hostname when ignored, got=%q", resp3.Options.Get(dhcpv4.OptionHostName))
+		}
+	})
+
+	t.Run("no_match_continues_to_default", func(t *testing.T) {
+		resp4, _ := dhcpv4.NewReplyFromRequest(&dhcpv4.DHCPv4{})
+		rules := []Rule{{
+			Name:   "wont_match",
+			Match:  Match{Types: map[string]bool{"RouterBMC": true}},
+			Action: Action{Ignore: true},
+		}}
+
+		shouldRespond := Evaluate4(nil, ii, "test.local", "info", resp4, rules)
+		if !shouldRespond {
+			t.Fatalf("expected shouldRespond=true when no rule matches")
+		}
+
+		// Verify default hostname was set
+		hostname := string(resp4.Options.Get(dhcpv4.OptionHostName))
+		if !strings.HasPrefix(hostname, "unknown-") {
+			t.Fatalf("expected default hostname pattern, got=%q", hostname)
+		}
+	})
+}
+
+// TestEvaluate6_Ignore tests that DHCPv6 requests are dropped when ignore=true
+func TestEvaluate6_Ignore(t *testing.T) {
+	// Test component info with IPv6
+	ii := iface.IfaceInfo{
+		CompID:  "x3000c0s0b0n0",
+		CompNID: 5,
+		Type:    "Node",
+		MAC:     "de:ad:be:ef:00:01",
+		IPList:  []net.IP{net.ParseIP("2001:db8::1")},
+	}
+
+	t.Run("ignore_true_drops_request", func(t *testing.T) {
+		resp, err := dhcpv6.NewMessage()
+		if err != nil {
+			t.Fatalf("failed to create DHCPv6 response: %v", err)
+		}
+
+		rules := []Rule{{
+			Name:   "drop_all_v6",
+			Match:  Match{Types: map[string]bool{"Node": true}},
+			Action: Action{Ignore: true},
+		}}
+
+		shouldRespond := Evaluate6(nil, ii, "test.local", "info", resp, rules)
+		if shouldRespond {
+			t.Fatalf("expected shouldRespond=false got=true")
+		}
+
+		// Verify no FQDN was set
+		if opt := resp.GetOneOption(dhcpv6.OptionFQDN); opt != nil {
+			t.Fatalf("expected no FQDN when ignored, got=%v", opt)
+		}
+	})
+
+	t.Run("ignore_false_allows_request", func(t *testing.T) {
+		resp, _ := dhcpv6.NewMessage()
+		rules := []Rule{{
+			Name:   "allow_with_hostname_v6",
+			Match:  Match{Types: map[string]bool{"Node": true}},
+			Action: Action{Ignore: false, Hostname: "test-{04d}"},
+		}}
+
+		shouldRespond := Evaluate6(nil, ii, "test.local", "info", resp, rules)
+		if !shouldRespond {
+			t.Fatalf("expected shouldRespond=true got=false")
+		}
+
+		// Verify FQDN was set
+		opt := resp.GetOneOption(dhcpv6.OptionFQDN)
+		if opt == nil {
+			t.Fatalf("expected FQDN option to be set")
+		}
+	})
+}
