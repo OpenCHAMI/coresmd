@@ -13,7 +13,7 @@ import (
 type SubnetConfig struct {
 	// CIDR is the parsed subnet in CIDR notation (e.g., "10.40.1.0/24").
 	CIDR *net.IPNet
-	// Router is the gateway IP for this subnet (e.g., net.ParseIP("10.40.1.1")).
+	// Router is the router IP for this subnet (e.g., net.ParseIP("10.40.1.1")).
 	// It may be nil when the subnet is auto-built from rule-level subnet: match
 	// keys without an explicit router.
 	Router net.IP
@@ -39,7 +39,7 @@ func NewSubnetContext() *SubnetContext {
 // AddSubnet registers a subnet in the context.
 //
 //   - cidr: the subnet in CIDR notation, e.g. "10.40.1.0/24".
-//   - router: the gateway IP for the subnet, e.g. "10.40.1.1".
+//   - router: the router IP for the subnet, e.g. "10.40.1.1".
 //     Must be an address within cidr.
 func (sc *SubnetContext) AddSubnet(cidr string, router string) error {
 	_, ipnet, err := net.ParseCIDR(cidr)

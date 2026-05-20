@@ -175,7 +175,7 @@ func TestParseConfig_SubnetAutoBuiltFromRules(t *testing.T) {
 	}
 
 	// Single rule with subnet match auto-builds SubnetContext
-	args := append(append([]string{}, base...),
+	args := append(base,
 		"rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24",
 	)
 	cfg, errs := parseConfig(args...)
@@ -190,7 +190,7 @@ func TestParseConfig_SubnetAutoBuiltFromRules(t *testing.T) {
 	}
 
 	// Multiple rules with different subnets
-	args = append(append([]string{}, base...),
+	args = append(base,
 		"rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24",
 		"rule=subnet:10.40.3.0/24,type:Node,hostname:storage-{04d},routers:10.40.3.1,cidr:24",
 	)
@@ -206,7 +206,7 @@ func TestParseConfig_SubnetAutoBuiltFromRules(t *testing.T) {
 	}
 
 	// Duplicate subnet across rules should not double-count
-	args = append(append([]string{}, base...),
+	args = append(base,
 		"rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24",
 		"rule=subnet:10.40.1.0/24,type:NodeBMC,hostname:bmc-{04d}",
 	)
@@ -219,7 +219,7 @@ func TestParseConfig_SubnetAutoBuiltFromRules(t *testing.T) {
 	}
 
 	// Rules without subnet match should not create SubnetContext
-	args = append(append([]string{}, base...),
+	args = append(base,
 		"rule=type:Node,hostname:nid{04d}",
 		"rule=type:NodeBMC,hostname:bmc{04d}",
 	)

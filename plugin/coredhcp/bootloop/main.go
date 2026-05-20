@@ -394,6 +394,10 @@ func (c *Config) validate() (warns []string, errs []error) {
 		}
 	}
 
+	if usingLegacyPool {
+		warns = append(warns, "'ipv4_start' and 'ipv4_end' are deprecated and will be removed in a future release; use 'subnet_pool' instead")
+	}
+
 	if c.leaseTime == nil {
 		warns = append(warns, fmt.Sprintf("lease_time unset, defaulting to %s", defaultLeaseTime))
 		duration, err := time.ParseDuration(defaultLeaseTime)
