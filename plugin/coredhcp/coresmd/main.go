@@ -26,23 +26,25 @@ import (
 	"github.com/openchami/coresmd/internal/ipxe"
 	"github.com/openchami/coresmd/internal/rule"
 	"github.com/openchami/coresmd/internal/smdclient"
+	"github.com/openchami/coresmd/internal/subnet"
 	"github.com/openchami/coresmd/internal/tftp"
 	"github.com/openchami/coresmd/internal/version"
 )
 
 type Config struct {
 	// Parsed from configuration file
-	svcBaseURI  *url.URL       // svc_base_uri
-	ipxeBaseURI *url.URL       // ipxe_base_uri
-	caCert      string         // ca_cert
-	cacheValid  *time.Duration // cache_valid
-	leaseTime   *time.Duration // lease_time
-	singlePort  bool           // single_port
-	tftpDir     string         // tftp_dir
-	tftpPort    int            // tftp_port
-	domain      string         // domain
-	ruleLog     string         // rule_log
-	rules       []rule.Rule    // rule
+	svcBaseURI    *url.URL              // svc_base_uri
+	ipxeBaseURI   *url.URL              // ipxe_base_uri
+	caCert        string                // ca_cert
+	cacheValid    *time.Duration        // cache_valid
+	leaseTime     *time.Duration        // lease_time
+	singlePort    bool                  // single_port
+	tftpDir       string                // tftp_dir
+	tftpPort      int                   // tftp_port
+	domain        string                // domain
+	ruleLog       string                // rule_log
+	rules         []rule.Rule           // rule
+	subnetContext *subnet.SubnetContext // auto-built from rule subnet: match keys
 }
 
 func (c Config) String() string {
@@ -349,6 +351,22 @@ func parseConfig(argv ...string) (cfg Config, errs []error) {
 	if insideComment {
 		errs = append(errs, fmt.Errorf("arg %d: unterminated comment (\"/*\" found without a \"*/\")", commentIdx))
 	}
+
+	// Auto-build SubnetContext from rule-level subnet: match keys.
+	// This makes coresmd relay-aware natively without a separate subnet=
+	// config directive. Rules set DHCP options (routers, netmask) directly.
+	for _, r := range cfg.rules {
+		for _, sn := range r.Match.Subnets {
+			if cfg.subnetContext == nil {
+				cfg.subnetContext = subnet.NewSubnetContext()
+			}
+			cidr := sn.String()
+			if err := cfg.subnetContext.AddSubnetCIDROnly(cidr); err != nil {
+				errs = append(errs, fmt.Errorf("failed to register subnet %s from rule: %w", cidr, err))
+			}
+		}
+	}
+
 	return
 }
 
@@ -422,11 +440,25 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 
 	// STEP 1: Assign IP address and set standard DHCP options
 	hwAddr := req.ClientHWAddr.String()
-	ifaceInfo, err := iface.LookupMAC(log, hwAddr, smdCache)
-	if err != nil {
-		log.Errorf("IP lookup failed: %v", err)
-		return resp, false
+	giaddr := req.GatewayIPAddr
+
+	// Use subnet-aware lookup if subnet context is configured
+	var ifaceInfo iface.IfaceInfo
+	var err error
+	if globalConfig.subnetContext != nil && !globalConfig.subnetContext.IsEmpty() {
+		ifaceInfo, err = iface.LookupMACWithSubnet(log, hwAddr, giaddr, smdCache, globalConfig.subnetContext)
+		if err != nil {
+			log.Errorf("subnet-aware IP lookup failed for MAC %s (giaddr=%s): %v", hwAddr, giaddr, err)
+			return resp, false
+		}
+	} else {
+		ifaceInfo, err = iface.LookupMAC(log, hwAddr, smdCache)
+		if err != nil {
+			log.Errorf("IP lookup failed: %v", err)
+			return resp, false
+		}
 	}
+
 	assignedIP := ifaceInfo.IPList[0].To4()
 	resp.YourIPAddr = assignedIP
 
@@ -454,6 +486,7 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 		"assigned_hostname": string(resp.Options.Get(dhcpv4.OptionHostName)),
 		"lease_duration":    globalConfig.leaseTime,
 		"server_ip":         resp.ServerIPAddr,
+		"giaddr":            giaddr,
 		"router_ips":        fmt.Sprintf("%v", dhcpv4.GetIPs(dhcpv4.OptionRouter, resp.Options)),
 		"netmask":           fmt.Sprintf("%v", dhcpv4.GetIP(dhcpv4.OptionSubnetMask, resp.Options)),
 	}).Info("DHCPv4 assignment")

@@ -142,7 +142,7 @@ server4:
     #   keys are optional (type/subnet/id). If no rule sets a hostname, CoreSMD
     #   falls back to the built-in default hostname pattern "unknown-{04d}".
     #
-    #   See examples/coredhcp/hostnames.md for details and advanced examples.
+    #   See examples/coredhcp/rules.md for details and advanced examples.
     #
     # lease_time (OPTIONAL, string, default=1h)
     #   The time duration that the served leases are valid. If omitted, the
@@ -191,6 +191,28 @@ server4:
         rule=type:HSNSwitch,hostname:{id}
         /* OPTIONAL: override built-in fallback (default is unknown-{04d}) */
         rule=hostname:unknown-{04d}
+
+    # MULTI-SUBNET EXAMPLE
+    #
+    # The following example shows a multi-subnet configuration where the DHCP
+    # server serves two subnets with different hostnames and routers. CoreSMD
+    # automatically becomes relay-aware (giaddr-based IP selection) when rules
+    # contain subnet: match keys. Rules set per-subnet routers and netmasks
+    # via routers: and cidr: action keys.
+    #
+    # - coresmd: |
+    #     svc_base_uri=https://foobar.openchami.cluster
+    #     ipxe_base_uri=http://172.16.0.253:8081
+    #     ca_cert=/root_ca/root_ca.crt
+    #     cache_valid=30s
+    #     lease_time=1h
+    #     domain=openchami.cluster
+    #     rule_log=info
+    #     /* Per-subnet rules: subnet: enables giaddr-aware IP filtering */
+    #     rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24
+    #     rule=subnet:10.40.3.0/24,type:Node,hostname:storage-{04d},routers:10.40.3.1,cidr:24
+    #     rule=type:NodeBMC,hostname:bmc{04d}
+    #     rule=hostname:unknown-{04d}
 
     # Any requests reaching this point are unknown to SMD and it is up to the
     # administrator to decide how to handle unknown packets.
@@ -252,9 +274,11 @@ server4:
     #   time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
     #
     # ipv4_start (REQUIRED, string)
+    #   DEPRECATED: Use subnet_pool instead.
     #   The start IPv4 address for the pool of IPs to assign.
     #
     # ipv4_end (REQUIRED, string)
+    #   DEPRECATED: Use subnet_pool instead.
     #   The end IPv4 address for the pool of IPs to assign.
     - bootloop: |
         /* file to store DHCP leases in */

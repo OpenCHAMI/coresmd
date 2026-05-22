@@ -168,6 +168,102 @@ func TestConfigValidate_DefaultsApplied(t *testing.T) {
 	}
 }
 
+func TestParseConfig_SubnetAutoBuiltFromRules(t *testing.T) {
+	base := []string{
+		"svc_base_uri=https://svc.example.test",
+		"ipxe_base_uri=https://ipxe.example.test",
+	}
+
+	// Single rule with subnet match auto-builds SubnetContext
+	args := append(base,
+		"rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24",
+	)
+	cfg, errs := parseConfig(args...)
+	if len(errs) != 0 {
+		t.Fatalf("single rule with subnet: unexpected errors: %v", errs)
+	}
+	if cfg.subnetContext == nil {
+		t.Fatal("single rule with subnet: subnetContext should be auto-built")
+	}
+	if cfg.subnetContext.Count() != 1 {
+		t.Fatalf("single rule with subnet: count=%d, want 1", cfg.subnetContext.Count())
+	}
+
+	// Multiple rules with different subnets
+	args = append(base,
+		"rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24",
+		"rule=subnet:10.40.3.0/24,type:Node,hostname:storage-{04d},routers:10.40.3.1,cidr:24",
+	)
+	cfg, errs = parseConfig(args...)
+	if len(errs) != 0 {
+		t.Fatalf("multiple rules with subnets: unexpected errors: %v", errs)
+	}
+	if cfg.subnetContext == nil {
+		t.Fatal("multiple rules with subnets: subnetContext should be auto-built")
+	}
+	if cfg.subnetContext.Count() != 2 {
+		t.Fatalf("multiple rules with subnets: count=%d, want 2", cfg.subnetContext.Count())
+	}
+
+	// Duplicate subnet across rules should not double-count
+	args = append(base,
+		"rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24",
+		"rule=subnet:10.40.1.0/24,type:NodeBMC,hostname:bmc-{04d}",
+	)
+	cfg, errs = parseConfig(args...)
+	if len(errs) != 0 {
+		t.Fatalf("duplicate subnet rules: unexpected errors: %v", errs)
+	}
+	if cfg.subnetContext.Count() != 1 {
+		t.Fatalf("duplicate subnet rules: count=%d, want 1", cfg.subnetContext.Count())
+	}
+
+	// Rules without subnet match should not create SubnetContext
+	args = append(base,
+		"rule=type:Node,hostname:nid{04d}",
+		"rule=type:NodeBMC,hostname:bmc{04d}",
+	)
+	cfg, errs = parseConfig(args...)
+	if len(errs) != 0 {
+		t.Fatalf("rules without subnet: unexpected errors: %v", errs)
+	}
+	if cfg.subnetContext != nil {
+		t.Fatal("rules without subnet: subnetContext should be nil")
+	}
+}
+
+func TestParseConfig_SubnetWithRules(t *testing.T) {
+	args := []string{
+		"svc_base_uri=https://svc.example.test",
+		"ipxe_base_uri=https://ipxe.example.test",
+		"rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24",
+		"rule=subnet:10.40.3.0/24,type:Node,hostname:storage-{04d},routers:10.40.3.1,cidr:24",
+		"rule=type:NodeBMC,hostname:bmc{04d}",
+	}
+
+	cfg, errs := parseConfig(args...)
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if cfg.subnetContext == nil || cfg.subnetContext.Count() != 2 {
+		t.Fatalf("expected 2 subnets in context, got %v", cfg.subnetContext)
+	}
+	if len(cfg.rules) != 3 {
+		t.Fatalf("expected 3 rules, got %d", len(cfg.rules))
+	}
+	// Verify first rule has subnet match and router action
+	r := cfg.rules[0]
+	if len(r.Match.Subnets) != 1 {
+		t.Fatalf("rule[0] expected 1 subnet match, got %d", len(r.Match.Subnets))
+	}
+	if len(r.Action.Routers) != 1 {
+		t.Fatalf("rule[0] expected 1 router, got %d", len(r.Action.Routers))
+	}
+	if ones, _ := r.Action.Netmask.Size(); ones != 24 {
+		t.Fatalf("rule[0] expected /24 netmask, got /%d", ones)
+	}
+}
+
 func TestSetup6_InvalidConfigFails(t *testing.T) {
 	if Plugin.Setup6 == nil {
 		t.Fatal("Plugin.Setup6 is nil")

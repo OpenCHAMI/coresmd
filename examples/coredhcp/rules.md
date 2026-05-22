@@ -51,6 +51,7 @@ match filters.
     - [7. Suppress domain suffix for selected hosts](#7-suppress-domain-suffix-for-selected-hosts)
     - [8. Hostname override with `continue`](#8-hostname-override-with-continue)
     - [9. Familiar "legacy-style" configuration, expressed as rules](#9-familiar-legacy-style-configuration-expressed-as-rules)
+  - [Multiple Subnet Support](#multiple-subnet-support)
   - [Caveats](#caveats)
   - [See Also](#see-also)
 
@@ -561,6 +562,40 @@ The old `node_pattern`, `bmc_pattern`, `hostname_by_type`, and
 
 This produces the same administrator-facing naming scheme as the legacy knobs,
 while preserving rule ordering and allowing additional matching criteria.
+
+## Multiple Subnet Support
+
+CoreSMD natively supports multi-subnet environments through rules with
+`subnet:` match keys. When any rule includes a `subnet:` match key, CoreSMD
+automatically becomes relay-aware: it uses the DHCP relay agent's giaddr to
+determine which subnet a request came from and filters the component's IP
+addresses to that subnet.
+
+### How It Works
+
+1. Rules with `subnet:CIDR` match keys register their CIDRs with CoreSMD
+2. When a DHCP request arrives with a non-zero giaddr, CoreSMD finds the
+   matching subnet and filters the component's IPs to that subnet
+3. Rule evaluation then sets DHCP options (hostname, routers, netmask) for
+   the matching subnet
+
+### Example
+
+```yaml
+- coresmd: |
+    rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24
+    rule=subnet:10.40.3.0/24,type:Node,hostname:storage-{04d},routers:10.40.3.1,cidr:24
+    rule=type:NodeBMC,hostname:bmc{04d}
+    rule=hostname:unknown-{04d}
+```
+
+In this configuration:
+- Requests relayed from the 10.40.1.0/24 subnet get `compute-NNNN` hostnames,
+  router 10.40.1.1, and a /24 netmask
+- Requests relayed from the 10.40.3.0/24 subnet get `storage-NNNN` hostnames,
+  router 10.40.3.1, and a /24 netmask
+- BMC and fallback rules apply regardless of subnet
+- If no giaddr is present (direct connection), all IPs are considered
 
 ## Caveats
 
