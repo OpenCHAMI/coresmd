@@ -38,6 +38,7 @@ match filters.
       - [`domain:DOMAIN`](#domaindomain-1)
       - [`domain_append:MODE`](#domain_appendmode)
       - [`continue:{true|false}`](#continuetruefalse)
+      - [`ignore:{true|false}`](#ignoretruefalse)
       - [`name:STRING`](#namestring)
       - [`log:{info|debug|none}`](#loginfodebugnone)
   - [Rule Ordering](#rule-ordering)
@@ -232,7 +233,7 @@ Mutually exclusive with `id`.
 ### Action Keys
 
 Rules may apply one or more actions when matched. At least one action must be
-specified (`hostname`, `routers`, `netmask`, or `cidr`). If no match keys are
+specified (`hostname`, `routers`, `netmask`, `cidr`, or `ignore`). If no match keys are
 specified, the action(s) will apply to all incoming DHCP requests.
 
 #### `hostname:PATTERN`
@@ -332,6 +333,52 @@ If `true`, evaluation continues after a match.
 If `false`, evaluation ceases after a match and the hostname is final.
 
 **Default:** `false`
+
+#### `ignore:{true|false}`
+
+When set to `true`, causes CoreSMD to drop the DHCP request without sending a
+response. The client will not receive any DHCP response from the CoreSMD plugin.
+
+This is useful for explicitly filtering out components that should not receive
+DHCP leases from CoreSMD, such as:
+
+- Specific component types that should be handled by other DHCP plugins
+- Test/maintenance subnets that should be ignored
+- Individual components that are being decommissioned
+
+**Behavior:**
+
+- If `ignore:true` is present in a matching rule, it takes precedence over all
+  other actions (`hostname`, `routers`, `netmask`, `cidr`)
+- The DHCP request is dropped immediately upon matching the rule, before any
+  DHCP options are set
+- The request does NOT continue to subsequent CoreDHCP plugins (bootloop, file, etc.)
+- Logging respects the rule's `log` setting (info/debug/none)
+
+**Default:** `false` (when not specified or explicitly set to `false`, the rule
+behaves normally and processes other actions)
+
+**Examples:**
+
+```yaml
+# Drop all RouterBMC DHCP requests
+rule=type:RouterBMC,ignore:true,log:info
+
+# Drop requests from specific subnet
+rule=subnet:172.16.99.0/24,ignore:true
+
+# Drop specific component by xname
+rule=id:x3000c0s0b999,ignore:true
+
+# Combine with continue for complex filtering
+rule=type:Node,subnet:10.0.0.0/8,ignore:true
+rule=type:Node,hostname:compute-{04d}
+
+# Explicit false (no-op, since false is default)
+rule=type:Node,hostname:compute-{04d},ignore:false
+```
+
+**See also:** [`continue`](#continuetruefalse) action key for controlling rule evaluation flow.
 
 #### `name:STRING`
 

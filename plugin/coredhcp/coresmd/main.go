@@ -470,7 +470,12 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	}
 
 	// Apply rules
-	rule.Evaluate4(log, ifaceInfo, globalConfig.domain, globalConfig.ruleLog, resp, globalConfig.rules)
+	shouldRespond := rule.Evaluate4(log, ifaceInfo, globalConfig.domain, globalConfig.ruleLog, resp, globalConfig.rules)
+	if !shouldRespond {
+		// Drop request and return nil to prevent response
+		log.Debugf("DHCP request dropped due to ignore rule for %s", ifaceInfo.MAC)
+		return nil, true
+	}
 
 	// Set root path to this server's IP
 	resp.Options.Update(dhcpv4.OptRootPath(resp.ServerIPAddr.String()))
@@ -552,7 +557,12 @@ func Handler6(req, resp dhcpv6.DHCPv6) (dhcpv6.DHCPv6, bool) {
 	}
 
 	// Apply rules
-	rule.Evaluate6(log, ifaceInfo, globalConfig.domain, globalConfig.ruleLog, msg, globalConfig.rules)
+	shouldRespond := rule.Evaluate6(log, ifaceInfo, globalConfig.domain, globalConfig.ruleLog, msg, globalConfig.rules)
+	if !shouldRespond {
+		// Drop request and return nil to prevent response
+		log.Debugf("DHCPv6 request dropped due to ignore rule for %s", ifaceInfo.MAC)
+		return nil, true
+	}
 
 	// Add IANA (Identity Association for Non-temporary Addresses) with the IPv6 address
 	reqMsg, ok := req.(*dhcpv6.Message)

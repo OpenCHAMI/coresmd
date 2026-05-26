@@ -88,4 +88,4 @@ spec:
   - name: metrics
     port: 9153
     protocol: TCP
-  type: ClusterIP 
+  type: ClusterIP
