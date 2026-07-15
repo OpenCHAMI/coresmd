@@ -63,7 +63,7 @@ In a CoreDHCP configuration:
 ```yaml
 - coresmd: |
     svc_base_uri=https://smd.cluster.local
-    ipxe_base_uri=http://192.168.1.1
+    ipxe_uri=http://192.168.1.1:8081/bootscript
     cache_valid=30s
     lease_time=24h
     domain=cluster.local
@@ -420,7 +420,7 @@ generic naming followed by narrow overrides.
 ```yaml
 - coresmd: |
     svc_base_uri=https://smd.cluster.local
-    ipxe_base_uri=http://192.168.1.1
+    ipxe_uri=http://192.168.1.1:8081/bootscript
     rule=type:Node,hostname:nid{04d}
 ```
 

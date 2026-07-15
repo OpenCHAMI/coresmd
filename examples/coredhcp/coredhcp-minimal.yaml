@@ -33,7 +33,7 @@ server4:
     # CoreSMD plugin for dynamic IP assignment
     - coresmd: |
         svc_base_uri=http://smd.cluster.local
-        ipxe_base_uri=http://192.168.1.1:8081
+        ipxe_uri=http://192.168.1.1:8081/bootscript
         cache_valid=30s
         lease_time=24h
         /* Rules (see examples/coredhcp/hostnames.md) */
@@ -61,7 +61,7 @@ server6:
     # CoreSMD plugin for dynamic IPv6 assignment
     - coresmd: |
         svc_base_uri=http://smd.cluster.local
-        ipxe_base_uri=http://[fd00::1]:8081
+        ipxe_uri=http://[fd00::1]:8081/bootscript
         cache_valid=30s
         lease_time=24h
         /* Rules (see examples/coredhcp/hostnames.md) */
