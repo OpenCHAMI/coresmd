@@ -34,7 +34,7 @@ import (
 type Config struct {
 	// Parsed from configuration file
 	svcBaseURI    *url.URL              // svc_base_uri
-	ipxeBaseURI   *url.URL              // ipxe_base_uri
+	ipxeURI       *url.URL              // ipxe_uri
 	caCert        string                // ca_cert
 	cacheValid    *time.Duration        // cache_valid
 	leaseTime     *time.Duration        // lease_time
@@ -48,9 +48,9 @@ type Config struct {
 }
 
 func (c Config) String() string {
-	cfgStr := fmt.Sprintf("svc_base_uri=%s ipxe_base_uri=%s ca_cert=%s cache_valid=%s lease_time=%s single_port=%v tftp_dir=%s tftp_port=%d domain=%s rule_log=%s",
+	cfgStr := fmt.Sprintf("svc_base_uri=%s ipxe_uri=%s ca_cert=%s cache_valid=%s lease_time=%s single_port=%v tftp_dir=%s tftp_port=%d domain=%s rule_log=%s",
 		c.svcBaseURI,
-		c.ipxeBaseURI,
+		c.ipxeURI,
 		c.caCert,
 		c.cacheValid,
 		c.leaseTime,
@@ -247,12 +247,12 @@ func parseConfig(argv ...string) (cfg Config, errs []error) {
 			} else {
 				cfg.svcBaseURI = svcURI
 			}
-		case "ipxe_base_uri":
+		case "ipxe_uri":
 			if ipxeURI, err := url.Parse(opt[1]); err != nil {
 				errs = append(errs, fmt.Errorf("non-comment arg %d: %s: invalid URI '%s' (skipping): %w", idx, opt[0], opt[1], err))
 				continue
 			} else {
-				cfg.ipxeBaseURI = ipxeURI
+				cfg.ipxeURI = ipxeURI
 			}
 		case "ca_cert":
 			// Simply set if nonempty when trimmed. Checking happens later.
@@ -378,8 +378,8 @@ func (c *Config) validate() (warns []string, errs []error) {
 	if c.svcBaseURI == nil {
 		errs = append(errs, fmt.Errorf("svc_base_uri is required"))
 	}
-	if c.ipxeBaseURI == nil {
-		errs = append(errs, fmt.Errorf("ipxe_base_uri is required"))
+	if c.ipxeURI == nil {
+		errs = append(errs, fmt.Errorf("ipxe_uri is required"))
 	}
 	if c.caCert == "" {
 		warns = append(warns, "ca_cert unset, TLS certificates will not be validated")
@@ -428,6 +428,14 @@ func (c *Config) validate() (warns []string, errs []error) {
 		}
 	}
 	return
+}
+
+// bootscriptURI returns a string of the passed URI (presumed to be the iPXE
+// URI) concatenated with a mac= query parameter with the passed MAC address.
+func bootScriptURIForMAC(base *url.URL, mac string) string {
+	scriptURI := *base
+	scriptURI.RawQuery = fmt.Sprintf("mac=%s", mac)
+	return scriptURI.String()
 }
 
 func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
@@ -501,10 +509,8 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 		// BOOT STAGE 1: Send iPXE bootloader over TFTP
 		resp, _ = ipxe.ServeIPXEBootloader(log, req, resp)
 	} else {
-		// BOOT STAGE 2: Send URL to BSS boot script
-		bssURL := globalConfig.ipxeBaseURI.JoinPath("/boot/v1/bootscript")
-		bssURL.RawQuery = fmt.Sprintf("mac=%s", hwAddr)
-		resp.Options.Update(dhcpv4.OptBootFileName(bssURL.String()))
+		// BOOT STAGE 2: Send URL to boot script
+		resp.Options.Update(dhcpv4.OptBootFileName(bootScriptURIForMAC(globalConfig.ipxeURI, hwAddr)))
 	}
 
 	debug.DebugResponse(log, resp)
@@ -614,10 +620,8 @@ func Handler6(req, resp dhcpv6.DHCPv6) (dhcpv6.DHCPv6, bool) {
 				}
 
 				if isPXE {
-					// BOOT STAGE 2: Send URL to BSS boot script
-					bssURL := globalConfig.ipxeBaseURI.JoinPath("/boot/v1/bootscript")
-					bssURL.RawQuery = fmt.Sprintf("mac=%s", macStr)
-					msg.UpdateOption(dhcpv6.OptBootFileURL(bssURL.String()))
+					// BOOT STAGE 2: Send URL to boot script
+					msg.UpdateOption(dhcpv6.OptBootFileURL(bootScriptURIForMAC(globalConfig.ipxeURI, macStr)))
 				} else {
 					// BOOT STAGE 1: Send iPXE bootloader URL
 					// For DHCPv6, we need to provide the bootfile URL

@@ -32,7 +32,7 @@ To migrate the above configuration to the new format, it would become:
 
 ```yaml
 plugins:
-  - coresmd: svc_base_uri=https://foobar.openchami.cluster ipxe_base_uri=http://172.16.0.253:8081 ca_cert=/root_ca/root_ca.crt cache_valid=30s lease_time=1h single_port=false
+  - coresmd: svc_base_uri=https://foobar.openchami.cluster ipxe_uri=http://172.16.0.253:8081/bootscript ca_cert=/root_ca/root_ca.crt cache_valid=30s lease_time=1h single_port=false
 ```
 
 So as to not have an endless text line, a YAML multi-line string can also be used to separate the arguments:
@@ -41,7 +41,7 @@ So as to not have an endless text line, a YAML multi-line string can also be use
 plugins:
   - coresmd: |
       svc_base_uri=https://foobar.openchami.cluster
-      ipxe_base_uri=http://172.16.0.253:8081
+      ipxe_uri=http://172.16.0.253:8081/bootscript
       ca_cert=/root_ca/root_ca.crt
       cache_valid=30s
       lease_time=1h single_port=false
@@ -54,8 +54,8 @@ plugins:
   - coresmd: |
       /* SMD base URI */
       svc_base_uri=https://foobar.openchami.cluster
-      /* BSS boot script base URI */
-      ipxe_base_uri=http://172.16.0.253:8081
+      /* Boot script URI */
+      ipxe_uri=http://172.16.0.253:8081/bootscript
       /* CA trust bundle */
       ca_cert=/root_ca/root_ca.crt
       /* SMD cache validity duration */
@@ -94,7 +94,7 @@ plugins:
   - dns: fd00:100::254
   - coresmd: |
       svc_base_uri=https://smd.openchami.cluster
-      ipxe_base_uri=http://[fd00:100::254]:8081
+      ipxe_uri=http://[fd00:100::254]:8081/bootscript
       ca_cert=/root_ca/root_ca.crt
       cache_valid=30s
       lease_time=1h

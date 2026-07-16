@@ -27,7 +27,7 @@ SPDX-License-Identifier: MIT
     - [CoreDNS](#coredns-1)
   - [Running](#running)
     - [Configuration](#configuration-1)
-    - [Preparation: SMD and BSS](#preparation-smd-and-bss)
+    - [Preparation: SMD and boot-service](#preparation-smd-and-boot-service)
     - [Preparation: TFTP](#preparation-tftp)
     - [Running](#running-1)
       - [CoreDHCP](#coredhcp-2)
@@ -276,9 +276,9 @@ CoreDHCP requires a config file to run. See [**examples/coredhcp/coredhcp.yaml**
 
 CoreDNS similarly has a **Corefile** to use. See [**examples/coredns/**](examples/coredns/) for examples of Corefiles.
 
-### Preparation: SMD and BSS
+### Preparation: SMD and boot-service
 
-Before running CoreDHCP/CoreDNS, ensure the [OpenCHAMI](https://openchami.org) services (notably **BSS** and **SMD**) are configured and running. Their URLs should match what you configure in the CoreDHCP config file.
+Before running CoreDHCP/CoreDNS, ensure the [OpenCHAMI](https://openchami.org) services (notably **SMD** and a boot script service such as **boot-service** or legacy **BSS**) are configured and running. Their URLs should match what you configure in the CoreDHCP config file.
 
 ### Preparation: TFTP
 
@@ -401,4 +401,3 @@ Once all prerequisites are set, you can run CoreDHCP or CoreDNS.
 - [SMD GitHub](https://github.com/OpenCHAMI/smd)
 - [GoReleaser Documentation](https://goreleaser.com/install/)
 - [Magellan (OpenCHAMI)](https://github.com/OpenCHAMI/magellan)
-

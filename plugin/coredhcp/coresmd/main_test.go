@@ -23,22 +23,22 @@ func TestConfigString_IncludesKeyFields(t *testing.T) {
 	leaseDur := 5 * time.Minute
 
 	cfg := Config{
-		svcBaseURI:  svc,
-		ipxeBaseURI: ipxe,
-		caCert:      "/etc/ssl/ca.pem",
-		cacheValid:  &cacheDur,
-		leaseTime:   &leaseDur,
-		singlePort:  true,
-		tftpDir:     "/tftp",
-		tftpPort:    1069,
-		domain:      "example.test",
-		ruleLog:     "debug",
+		svcBaseURI: svc,
+		ipxeURI:    ipxe,
+		caCert:     "/etc/ssl/ca.pem",
+		cacheValid: &cacheDur,
+		leaseTime:  &leaseDur,
+		singlePort: true,
+		tftpDir:    "/tftp",
+		tftpPort:   1069,
+		domain:     "example.test",
+		ruleLog:    "debug",
 	}
 
 	s := cfg.String()
 	wantSubstrings := []string{
 		"svc_base_uri=" + svc.String(),
-		"ipxe_base_uri=" + ipxe.String(),
+		"ipxe_uri=" + ipxe.String(),
 		"ca_cert=/etc/ssl/ca.pem",
 		"cache_valid=" + cacheDur.String(),
 		"lease_time=" + leaseDur.String(),
@@ -61,7 +61,7 @@ func TestParseConfig_Rules(t *testing.T) {
 
 	args := []string{
 		"svc_base_uri=https://svc.example.test",
-		"ipxe_base_uri=https://ipxe.example.test",
+		"ipxe_uri=https://ipxe.example.test/bootscript",
 		"ca_cert=/etc/pki/ca.pem",
 		"cache_valid=" + cacheDur.String(),
 		"lease_time=" + leaseDur.String(),
@@ -110,13 +110,73 @@ func TestParseConfig_Rules(t *testing.T) {
 	}
 }
 
+func TestParseConfig_IPXEURI(t *testing.T) {
+	cfg, errs := parseConfig(
+		"svc_base_uri=https://svc.example.test",
+		"ipxe_uri=https://ipxe.example.test/bootscript",
+	)
+	if len(errs) != 0 {
+		t.Fatalf("parseConfig() unexpected errors: %v", errs)
+	}
+	if cfg.ipxeURI == nil {
+		t.Fatal("ipxeURI is nil")
+	}
+	if got, want := cfg.ipxeURI.String(), "https://ipxe.example.test/bootscript"; got != want {
+		t.Fatalf("ipxeURI=%q, want %q", got, want)
+	}
+}
+
+func TestParseConfig_LegacyIPXEBaseURIRejected(t *testing.T) {
+	_, errs := parseConfig(
+		"svc_base_uri=https://svc.example.test",
+		"ipxe_base_uri=https://ipxe.example.test",
+	)
+	if len(errs) == 0 {
+		t.Fatal("parseConfig() expected error for legacy ipxe_base_uri")
+	}
+	if !strings.Contains(errs[0].Error(), "unknown config key 'ipxe_base_uri'") {
+		t.Fatalf("parseConfig() error=%q, want unknown legacy key", errs[0])
+	}
+}
+
+func TestBootScriptURI_UsesConfiguredFullPath(t *testing.T) {
+	tests := []struct {
+		name string
+		uri  string
+		want string
+	}{
+		{
+			name: "boot-service",
+			uri:  "http://ipxe.example.test:8081/bootscript",
+			want: "http://ipxe.example.test:8081/bootscript?mac=00:11:22:33:44:55",
+		},
+		{
+			name: "legacy-bss",
+			uri:  "http://ipxe.example.test:8081/boot/v1/bootscript",
+			want: "http://ipxe.example.test:8081/boot/v1/bootscript?mac=00:11:22:33:44:55",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ipxeURI, _ := url.Parse(tt.uri)
+			if got := bootScriptURIForMAC(ipxeURI, "00:11:22:33:44:55"); got != tt.want {
+				t.Fatalf("bootScriptURIForMAC()=%q, want %q", got, tt.want)
+			}
+			if got := ipxeURI.String(); got != tt.uri {
+				t.Fatalf("bootScriptURIForMAC() mutated input URI to %q, want %q", got, tt.uri)
+			}
+		})
+	}
+}
+
 func TestConfigValidate_RuleLogInheritance(t *testing.T) {
 	svc, _ := url.Parse("https://svc.example.test")
 	ipxe, _ := url.Parse("https://ipxe.example.test")
 
 	// Create a config with a rule that omits Log; validate should set the
 	// effective per-rule log to the global rule_log value.
-	cfg := Config{svcBaseURI: svc, ipxeBaseURI: ipxe, ruleLog: "debug"}
+	cfg := Config{svcBaseURI: svc, ipxeURI: ipxe, ruleLog: "debug"}
 	cfg.rules = []rule.Rule{{Name: "r1", Log: "", Action: rule.Action{Hostname: "nid{04d}"}}}
 
 	_, errs := cfg.validate()
@@ -128,7 +188,7 @@ func TestConfigValidate_RuleLogInheritance(t *testing.T) {
 	}
 
 	// Explicit rule log must override global.
-	cfg = Config{svcBaseURI: svc, ipxeBaseURI: ipxe, ruleLog: "debug"}
+	cfg = Config{svcBaseURI: svc, ipxeURI: ipxe, ruleLog: "debug"}
 	cfg.rules = []rule.Rule{{Name: "r1", Log: "none", Action: rule.Action{Hostname: "nid{04d}"}}}
 	_, errs = cfg.validate()
 	if len(errs) != 0 {
@@ -143,7 +203,7 @@ func TestConfigValidate_DefaultsApplied(t *testing.T) {
 	svc, _ := url.Parse("https://svc.example.test")
 	ipxe, _ := url.Parse("https://ipxe.example.test")
 
-	cfg := Config{svcBaseURI: svc, ipxeBaseURI: ipxe}
+	cfg := Config{svcBaseURI: svc, ipxeURI: ipxe}
 	warns, errs := cfg.validate()
 	if len(errs) != 0 {
 		t.Fatalf("validate() errs=%v", errs)
@@ -171,7 +231,7 @@ func TestConfigValidate_DefaultsApplied(t *testing.T) {
 func TestParseConfig_SubnetAutoBuiltFromRules(t *testing.T) {
 	base := []string{
 		"svc_base_uri=https://svc.example.test",
-		"ipxe_base_uri=https://ipxe.example.test",
+		"ipxe_uri=https://ipxe.example.test/bootscript",
 	}
 
 	// Single rule with subnet match auto-builds SubnetContext
@@ -235,7 +295,7 @@ func TestParseConfig_SubnetAutoBuiltFromRules(t *testing.T) {
 func TestParseConfig_SubnetWithRules(t *testing.T) {
 	args := []string{
 		"svc_base_uri=https://svc.example.test",
-		"ipxe_base_uri=https://ipxe.example.test",
+		"ipxe_uri=https://ipxe.example.test/bootscript",
 		"rule=subnet:10.40.1.0/24,type:Node,hostname:compute-{04d},routers:10.40.1.1,cidr:24",
 		"rule=subnet:10.40.3.0/24,type:Node,hostname:storage-{04d},routers:10.40.3.1,cidr:24",
 		"rule=type:NodeBMC,hostname:bmc{04d}",

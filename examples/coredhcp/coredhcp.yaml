@@ -104,11 +104,28 @@ server4:
     #   The base URI used to communicate with SMD. The SMD API
     #   paths are appended to this.
     #
-    # ipxe_base_uri (REQUIRED, string)
-    #   The base URI used to retrieve boot scripts. This is usually a base HTTP
-    #   URL to BSS, since the iPXE bootloader served by CoreSMD doesn't include
-    #   an OpenCHAMI CA certificate by default to do proper TLS. It may also be
-    #   an IP address if name servers are nod configured.
+    # ipxe_uri (REQUIRED, string)
+    #   The URI used to retrieve boot scripts. This is usually a full HTTP URI
+    #   to boot-service's boot script endpoint. Since the iPXE bootloader
+    #   served by CoreSMD doesn't include an OpenCHAMI CA certificate by
+    #   default to do proper TLS, http:// is supported alongside https://. It
+    #   may also be an IP address if name servers are not configured.
+    #
+    #   If using the legacy BSS API instead of the boot-service API, the URI
+    #   will likely look different than when using the boot-service URI. For
+    #   example, instead of using the following boot-service boot script URI:
+    #
+    #     ipxe_uri=http://<ip>:8081/bootscript
+    #
+    #   It would be the following for BSS:
+    #
+    #     ipxe_uri=http://<ip>:8081/boot/v1/bootscript
+    #
+    #   If using an API gateway, ensure to use whatever prefix is configured.
+    #   For example, if the API gateway routes /boot-service/* requests to
+    #   boot-service, use:
+    #
+    #     ipxe_uri=http://<ip>:8081/boot-service/bootscript
     #
     # ca_cert (OPTIONAL, string)
     #   The path to a certificate authority certificate used for TLS
@@ -180,8 +197,8 @@ server4:
     - coresmd: |
         /* SMD base URI */
         svc_base_uri=https://foobar.openchami.cluster
-        /* BSS base URI for obtaining boot scripts */
-        ipxe_base_uri=http://172.16.0.253:8081
+        /* Boot script URI */
+        ipxe_uri=http://172.16.0.253:8081/bootscript
         /* OPTIONAL: path to CA trust certificate bundle */
         ca_cert=/root_ca/root_ca.crt
         /* OPTIONAL: duration that component/interface cache is valid (default 30s) */
@@ -217,7 +234,7 @@ server4:
     #
     # - coresmd: |
     #     svc_base_uri=https://foobar.openchami.cluster
-    #     ipxe_base_uri=http://172.16.0.253:8081
+    #     ipxe_uri=http://172.16.0.253:8081/bootscript
     #     ca_cert=/root_ca/root_ca.crt
     #     cache_valid=30s
     #     lease_time=1h
@@ -358,17 +375,17 @@ server6:
     # - FQDN options (via domain= configuration) work with DHCPv6
     # - Boot file URLs should use IPv6 addresses in bracket notation:
     #   tftp://[fd00:100::254]:69/ipxe.efi
-    # - The ipxe_base_uri should include IPv6 addresses in bracket notation if
-    #   using IP addresses directly: http://[fd00:100::254]:8081
+    # - The ipxe_uri should include IPv6 addresses in bracket notation if
+    #   using IP addresses directly: http://[fd00:100::254]:8081/bootscript
     #
     # All configuration keys from DHCPv4 apply:
-    # - svc_base_uri, ipxe_base_uri, ca_cert
+    # - svc_base_uri, ipxe_uri, ca_cert
     # - cache_valid, lease_time
     # - single_port, tftp_dir, tftp_port
     # - domain, rule_log, rule
     - coresmd: |
         svc_base_uri=https://foobar.openchami.cluster
-        ipxe_base_uri=http://[fd00:100::254]:8081
+        ipxe_uri=http://[fd00:100::254]:8081/bootscript
         ca_cert=/root_ca/root_ca.crt
         cache_valid=30s
         lease_time=1h
