@@ -1,0 +1,71 @@
+# SPDX-FileCopyrightText: © 2026 OpenCHAMI a Series of LF Projects, LLC
+#
+# SPDX-License-Identifier: MIT
+
+name: Cleanup
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR Number whose container tags should be removed'
+        required: true
+        type: string
+
+permissions:
+  packages: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    steps:
+      - name: Get PR number
+        id: pr
+        run: |
+          if [[ "${{ inputs.pr_number }}" != "" ]]; then
+            echo "number=${{ inputs.pr_number }}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "number=${{ github.event.pull_request.number }}" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Delete PR container images
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUM="${{ steps.pr.outputs.number }}"
+          PACKAGE_NAME="${{ github.event.repository.name }}"
+          ORG_NAME="${{ github.repository_owner }}"
+
+          echo "Cleaning up container images for PR ${PR_NUM}..."
+
+          delete_tag() {
+            local tag=$1
+            local versions
+            echo "Attempting to delete tag: ${tag}"
+
+            versions=$(gh api --paginate \
+              "/orgs/${ORG_NAME}/packages/container/${PACKAGE_NAME}/versions" \
+              --jq ".[] | select(.metadata.container.tags[] | contains(\"${tag}\")) | .id")
+
+            if [[ -z "${versions}" ]]; then
+              echo "No version found for tag ${tag}"
+              return
+            fi
+
+            for version_id in ${versions}; do
+              echo "Deleting version ID: ${version_id}"
+              gh api --method DELETE \
+                "/orgs/${ORG_NAME}/packages/container/${PACKAGE_NAME}/versions/${version_id}" \
+                || echo "Failed to delete version ${version_id}"
+            done
+          }
+
+          delete_tag "pr-${PR_NUM}"
+          delete_tag "pr-${PR_NUM}-amd64"
+          delete_tag "pr-${PR_NUM}-arm64"
+
+          echo "Cleanup completed for PR ${PR_NUM}"

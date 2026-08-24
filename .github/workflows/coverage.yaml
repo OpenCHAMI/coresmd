@@ -1,0 +1,50 @@
+# SPDX-FileCopyrightText: © 2026 OpenCHAMI a Series of LF Projects, LLC
+#
+# SPDX-License-Identifier: MIT
+
+name: Coverage
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    name: Check test coverage
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests with coverage
+        run: make coverage
+
+      - name: Report coverage
+        run: |
+          TOTAL=$(go tool cover -func=coverage.out | awk '/^total:/ {print $3}')
+          echo "Total coverage: ${TOTAL}"
+          echo "Total coverage: ${TOTAL}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Install Coveralls dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y --no-install-recommends curl
+
+      - name: Upload coverage to Coveralls
+        uses: coverallsapp/github-action@8d6379e14d29928660c4ba802d8e85393440b329 # v2.3.8
+        with:
+          coverage-reporter-version: v0.6.22
+          file: coverage.out
+          format: golang
+          github-token: ${{ secrets.GITHUB_TOKEN }}
