@@ -7,6 +7,29 @@ SPDX-License-Identifier: MIT
 
 # CoreSMD - Connect CoreDHCP/CoreDNS to SMD
 
+[![Latest release](https://img.shields.io/github/v/release/OpenCHAMI/coresmd)](https://github.com/OpenCHAMI/coresmd/releases/latest)
+[![Test](https://github.com/OpenCHAMI/coresmd/actions/workflows/test.yml/badge.svg)](https://github.com/OpenCHAMI/coresmd/actions/workflows/test.yml)
+[![Coverage](https://coveralls.io/repos/github/OpenCHAMI/coresmd/badge.svg?branch=main)](https://coveralls.io/github/OpenCHAMI/coresmd?branch=main)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/OpenCHAMI/coresmd/badge)](https://scorecard.dev/viewer/?uri=github.com/OpenCHAMI/coresmd)
+
+<details>
+<summary>Additional project checks</summary>
+
+**Build quality**
+
+[![Release with GoReleaser](https://github.com/OpenCHAMI/coresmd/actions/workflows/release.yml/badge.svg)](https://github.com/OpenCHAMI/coresmd/actions/workflows/release.yml)
+[![Build](https://github.com/OpenCHAMI/coresmd/actions/workflows/build.yml/badge.svg)](https://github.com/OpenCHAMI/coresmd/actions/workflows/build.yml)
+[![Lint](https://github.com/OpenCHAMI/coresmd/actions/workflows/lint.yml/badge.svg)](https://github.com/OpenCHAMI/coresmd/actions/workflows/lint.yml)
+[![REUSE compliance check](https://github.com/OpenCHAMI/coresmd/actions/workflows/reuse.yaml/badge.svg)](https://github.com/OpenCHAMI/coresmd/actions/workflows/reuse.yaml)
+
+**Security**
+
+[![CodeQL](https://github.com/OpenCHAMI/coresmd/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/OpenCHAMI/coresmd/actions/workflows/github-code-scanning/codeql)
+[![Vulnerability Check](https://github.com/OpenCHAMI/coresmd/actions/workflows/govulncheck.yaml/badge.svg)](https://github.com/OpenCHAMI/coresmd/actions/workflows/govulncheck.yaml)
+
+</details>
+<br/>
+
 ## Contents
 
 - [CoreSMD - Connect CoreDHCP/CoreDNS to SMD](#coresmd---connect-coredhcpcoredns-to-smd)
@@ -21,6 +44,7 @@ SPDX-License-Identifier: MIT
       - [Using Make Targets](#using-make-targets)
       - [Running Goreleaser Manually](#running-goreleaser-manually)
     - [Build Binaries with Make](#build-binaries-with-make)
+    - [Local Checks Before Pushing](#local-checks-before-pushing)
     - [Build Container with Make](#build-container-with-make)
   - [Testing](#testing)
     - [CoreDHCP](#coredhcp-1)
@@ -169,6 +193,23 @@ coresmd
 $ ./coredns --plugins | grep coresmd
 coresmd
 ```
+
+### Local Checks Before Pushing
+
+Before pushing changes, build the project and run the same primary checks and
+tests used for pull requests:
+
+```bash
+# Build both binaries.
+make
+
+# Run static checks and tests.
+make lint reuse mod test
+```
+
+The `lint` target requires `golangci-lint`, `reuse` requires the REUSE CLI, and
+building requires `coredhcp-generator`. The `mod` target tidies Go module files;
+review and commit any resulting changes to `go.mod` or `go.sum`.
 
 ### Build Container with Make
 

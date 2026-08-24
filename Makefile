@@ -164,7 +164,7 @@ reuse: ## Check REUSE compliance
 check-reuse: reuse ## Alias for reuse
 
 .PHONY: lint
-lint:
+lint: ## Run golangci-lint
 	$(call require-command-shell,$(GOLANGCI_LINT),golangci-lint)
 	GOTOOLCHAIN=go$(GO_TOOLCHAIN_VERSION) $(GOLANGCI_LINT) run
 
