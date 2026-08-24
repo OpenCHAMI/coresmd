@@ -33,7 +33,7 @@ jobs:
       - name: Set up latest stable Go
         uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version-file: go.mod
       
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

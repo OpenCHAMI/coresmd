@@ -21,7 +21,7 @@ jobs:
       - name: Set up latest stable Go
         uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version-file: go.mod
       - name: Checkout repo
         uses: actions/checkout@v6
         with:
