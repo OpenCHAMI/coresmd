@@ -4,6 +4,7 @@
 
 # Set path to commands
 GO            ?= $(shell command -v go 2>/dev/null)
+GO_TOOLCHAIN_VERSION ?= $(shell awk '/^go / {print $$2; exit}' go.mod)
 GOLANGCI_LINT ?= $(shell command -v golangci-lint 2>/dev/null)
 GORELEASER    ?= $(shell command -v goreleaser 2>/dev/null)
 GIT           ?= $(shell command -v git 2>/dev/null)
@@ -154,7 +155,7 @@ lint:
 ifeq ($(GOLANGCI_LINT),)
 	$(error golangci-lint command not found)
 endif
-	$(GOLANGCI_LINT) run
+	GOTOOLCHAIN=go$(GO_TOOLCHAIN_VERSION) $(GOLANGCI_LINT) run
 
 .PHONY: test
 test: unit-test ## Run all tests
