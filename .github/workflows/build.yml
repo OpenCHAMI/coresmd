@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-name: Build
+name: build
 on:
   pull_request:
   workflow_dispatch:
@@ -132,3 +132,19 @@ jobs:
 
       - name: Build container from source using multi-stage build
         run: make container
+
+  build:
+    name: build
+    if: ${{ always() }}
+    needs:
+      - build-goreleaser
+      - build-make-binaries
+      - build-make-container-multistage
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: Verify build jobs passed
+        run: |
+          [[ "${{ needs.build-goreleaser.result }}" == "success" ]]
+          [[ "${{ needs.build-make-binaries.result }}" == "success" ]]
+          [[ "${{ needs.build-make-container-multistage.result }}" == "success" ]]
