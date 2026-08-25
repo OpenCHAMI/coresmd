@@ -22,6 +22,7 @@ var (
 	defaultDialKeepAlive         = 30 * time.Second
 	defaultTLSHandshakeTimeout   = 10 * time.Second
 	defaultResponseHeaderTimeout = 10 * time.Second
+	defaultRequestTimeout        = 30 * time.Second
 	defaultIdleConnTimeout       = 90 * time.Second
 	defaultMaxIdleConns          = 100
 	defaultMaxIdleConnsPerHost   = 100
@@ -56,6 +57,7 @@ func NewSmdClient(baseURL *url.URL) *SmdClient {
 		BaseURL: baseURL,
 		Client: &http.Client{
 			Transport: newTransport(nil),
+			Timeout:   defaultRequestTimeout,
 		},
 	}
 

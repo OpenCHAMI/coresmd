@@ -6,7 +6,9 @@
 package smdclient
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +17,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 //==============================================================================
@@ -105,6 +108,9 @@ func TestNewSmdClient(t *testing.T) {
 			}
 			if client.Client == nil {
 				t.Errorf("Client is nil, want non-nil http.Client")
+			}
+			if client.Timeout != defaultRequestTimeout {
+				t.Errorf("Timeout = %v, want %v", client.Timeout, defaultRequestTimeout)
 			}
 			assertTunedTransport(t, client.Transport, false)
 		})
@@ -374,6 +380,31 @@ func TestSmdClientAPIGet_ReadBodyError(t *testing.T) {
 	_, err = client.APIGet("/path")
 	if err == nil {
 		t.Fatalf("APIGet() error = nil, want non-nil on body read error")
+	}
+}
+
+func TestSmdClientAPIGet_BodyReadTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	baseURL, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("failed to parse test server URL: %v", err)
+	}
+
+	client := NewSmdClient(baseURL)
+	client.Timeout = 100 * time.Millisecond
+
+	_, err = client.APIGet("/path")
+	if err == nil {
+		t.Fatal("APIGet() error = nil, want timeout error")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("APIGet() error = %v, want context deadline exceeded", err)
 	}
 }
 
