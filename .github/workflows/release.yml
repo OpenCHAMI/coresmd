@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-name: Release with GoReleaser
+name: release
 
 on:
   workflow_dispatch:
@@ -22,12 +22,15 @@ jobs:
     # Releases require Docker Buildx, which is unavailable on the unprivileged
     # ubuntu-slim runner.
     runs-on: ubuntu-latest
+    name: Release with Goreleaser
     timeout-minutes: 45
     steps:
       - name: Install build dependencies
         run: |
           sudo apt update
-          sudo apt install -y --no-install-recommends gcc-aarch64-linux-gnu
+          sudo apt install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu \
+            libc6-dev-arm64-cross
 
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
