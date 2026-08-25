@@ -6,14 +6,18 @@
 package smdclient
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
+	"time"
 )
 
 //==============================================================================
@@ -30,6 +34,47 @@ type errorReader struct{}
 
 func (errorReader) Read(p []byte) (int, error) {
 	return 0, fmt.Errorf("read error")
+}
+
+func assertTunedTransport(t *testing.T, transport http.RoundTripper, wantTLSConfig bool) {
+	t.Helper()
+
+	tr, ok := transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("Transport type = %T, want *http.Transport", transport)
+	}
+	if tr.DisableKeepAlives {
+		t.Errorf("DisableKeepAlives = true, want false")
+	}
+	if tr.MaxIdleConns != defaultMaxIdleConns {
+		t.Errorf("MaxIdleConns = %d, want %d", tr.MaxIdleConns, defaultMaxIdleConns)
+	}
+	if tr.MaxIdleConnsPerHost != defaultMaxIdleConnsPerHost {
+		t.Errorf("MaxIdleConnsPerHost = %d, want %d", tr.MaxIdleConnsPerHost, defaultMaxIdleConnsPerHost)
+	}
+	if tr.IdleConnTimeout != defaultIdleConnTimeout {
+		t.Errorf("IdleConnTimeout = %v, want %v", tr.IdleConnTimeout, defaultIdleConnTimeout)
+	}
+	if tr.TLSHandshakeTimeout != defaultTLSHandshakeTimeout {
+		t.Errorf("TLSHandshakeTimeout = %v, want %v", tr.TLSHandshakeTimeout, defaultTLSHandshakeTimeout)
+	}
+	if tr.ResponseHeaderTimeout != defaultResponseHeaderTimeout {
+		t.Errorf("ResponseHeaderTimeout = %v, want %v", tr.ResponseHeaderTimeout, defaultResponseHeaderTimeout)
+	}
+	if tr.DialContext == nil {
+		t.Error("DialContext is nil, want tuned dialer")
+	}
+	if tr.TLSClientConfig == nil && wantTLSConfig {
+		t.Fatal("TLSClientConfig is nil")
+	}
+	if tr.TLSClientConfig != nil {
+		if tr.TLSClientConfig.RootCAs == nil && wantTLSConfig {
+			t.Errorf("RootCAs is nil, expected non-nil cert pool")
+		}
+		if tr.TLSClientConfig.InsecureSkipVerify {
+			t.Errorf("InsecureSkipVerify = true, want false")
+		}
+	}
 }
 
 //==============================================================================
@@ -64,6 +109,10 @@ func TestNewSmdClient(t *testing.T) {
 			if client.Client == nil {
 				t.Errorf("Client is nil, want non-nil http.Client")
 			}
+			if client.Timeout != defaultRequestTimeout {
+				t.Errorf("Timeout = %v, want %v", client.Timeout, defaultRequestTimeout)
+			}
+			assertTunedTransport(t, client.Transport, false)
 		})
 	}
 }
@@ -112,28 +161,7 @@ func TestSmdClientUseCACert(t *testing.T) {
 			expectTransport: true,
 			checkTransportFn: func(t *testing.T, c *SmdClient) {
 				t.Helper()
-				tr, ok := c.Transport.(*http.Transport)
-				if !ok {
-					t.Fatalf("Transport type = %T, want *http.Transport", c.Transport)
-				}
-				if tr.TLSClientConfig == nil {
-					t.Fatalf("TLSClientConfig is nil")
-				}
-				if tr.TLSClientConfig.RootCAs == nil {
-					t.Errorf("RootCAs is nil, expected non-nil cert pool")
-				}
-				if tr.TLSClientConfig.InsecureSkipVerify {
-					t.Errorf("InsecureSkipVerify = true, want false")
-				}
-				if !tr.DisableKeepAlives {
-					t.Errorf("DisableKeepAlives = false, want true")
-				}
-				if tr.TLSHandshakeTimeout != defaultTlsHandshakeTimeout {
-					t.Errorf("TLSHandshakeTimeout = %v, want %v", tr.TLSHandshakeTimeout, defaultTlsHandshakeTimeout)
-				}
-				if tr.ResponseHeaderTimeout != defaultResponseHeaderTimeout {
-					t.Errorf("ResponseHeaderTimeout = %v, want %v", tr.ResponseHeaderTimeout, defaultResponseHeaderTimeout)
-				}
+				assertTunedTransport(t, c.Transport, true)
 			},
 		},
 		{
@@ -227,6 +255,7 @@ func TestSmdClientAPIGet_SuccessAndStatusCodes(t *testing.T) {
 		name       string
 		statusCode int
 		body       string
+		wantErr    bool
 	}{
 		{
 			name:       "status_200_ok",
@@ -234,9 +263,15 @@ func TestSmdClientAPIGet_SuccessAndStatusCodes(t *testing.T) {
 			body:       "ok",
 		},
 		{
-			name:       "status_500_still_reads_body",
+			name:       "status_500_returns_error",
 			statusCode: http.StatusInternalServerError,
 			body:       "internal error",
+			wantErr:    true,
+		},
+		{
+			name:       "large_success_body",
+			statusCode: http.StatusOK,
+			body:       strings.Repeat("x", 2*1024*1024),
 		},
 	}
 
@@ -261,6 +296,15 @@ func TestSmdClientAPIGet_SuccessAndStatusCodes(t *testing.T) {
 			client.Client = srv.Client()
 
 			data, err := client.APIGet("/test/path")
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("APIGet() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				if !strings.Contains(err.Error(), tt.body) {
+					t.Fatalf("APIGet() error = %v, want body %q included", err, tt.body)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("APIGet() unexpected error: %v", err)
 			}
@@ -336,6 +380,31 @@ func TestSmdClientAPIGet_ReadBodyError(t *testing.T) {
 	_, err = client.APIGet("/path")
 	if err == nil {
 		t.Fatalf("APIGet() error = nil, want non-nil on body read error")
+	}
+}
+
+func TestSmdClientAPIGet_BodyReadTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	baseURL, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("failed to parse test server URL: %v", err)
+	}
+
+	client := NewSmdClient(baseURL)
+	client.Timeout = 100 * time.Millisecond
+
+	_, err = client.APIGet("/path")
+	if err == nil {
+		t.Fatal("APIGet() error = nil, want timeout error")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("APIGet() error = %v, want context deadline exceeded", err)
 	}
 }
 
@@ -499,4 +568,5 @@ func TestUseCACertTLSConfigType(t *testing.T) {
 	if !ok {
 		t.Fatalf("Transport type = %T, want *http.Transport", client.Transport)
 	}
+	assertTunedTransport(t, client.Transport, true)
 }
