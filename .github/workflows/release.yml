@@ -18,7 +18,7 @@ permissions:
   attestations: write
 
 jobs:
-  build:
+  release:
     # Releases require Docker Buildx, which is unavailable on the unprivileged
     # ubuntu-slim runner.
     runs-on: ubuntu-latest
