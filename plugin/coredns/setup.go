@@ -13,6 +13,7 @@ import (
 	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
+	"github.com/coredns/coredns/plugin/transfer"
 	"github.com/sirupsen/logrus"
 
 	"github.com/openchami/coresmd/internal/cache"
@@ -35,6 +36,9 @@ type Plugin struct {
 	// Shared infrastructure
 	cache     *cache.Cache
 	smdClient *smdclient.SmdClient
+
+	// Zone transfer state (shared pointer, Plugin is copied by value)
+	xfr *xfrState
 }
 
 // Global variables
@@ -66,6 +70,18 @@ func setup(c *caddy.Controller) error {
 			return err
 		}
 
+		// Wire the transfer plugin (if present in this server block) so we
+		// can send NOTIFY when SMD data changes, then start the serial watcher.
+		if t := dnsserver.GetConfig(c).Handler("transfer"); t != nil {
+			if xt, ok := t.(*transfer.Transfer); ok {
+				coresmd.xfr.mu.Lock()
+				coresmd.xfr.xfer = xt
+				coresmd.xfr.mu.Unlock()
+				log.Info("transfer plugin found, zone transfers and NOTIFY enabled")
+			}
+		}
+		coresmd.startSerialWatcher(coresmd.cache.Duration)
+
 		// Update cache metrics periodically
 		go func() {
 			ticker := time.NewTicker(30 * time.Second)
@@ -91,7 +107,7 @@ func setup(c *caddy.Controller) error {
 
 // parse parses the Corefile configuration for the coresmd plugin
 func parse(c *caddy.Controller) (*Plugin, error) {
-	p := &Plugin{}
+	p := &Plugin{xfr: &xfrState{}}
 
 	// The outer for c.Next() handles each "coresmd" stanza in the Corefile.
 	// Typically you'd have only one, but this loop allows multiple if needed.
@@ -196,6 +212,19 @@ func parseZone(c *caddy.Controller, zoneName string) (Zone, error) {
 			}
 			zone.NodePattern = c.Val()
 			seenNodes = true
+		case "ns":
+			// Primary nameserver name used in SOA MNAME and the apex NS record
+			// for zone transfers. Default: ns.<zone>
+			if !c.NextArg() {
+				return zone, c.ArgErr()
+			}
+			zone.NS = c.Val()
+		case "mailbox":
+			// SOA RNAME, e.g. hostmaster.example.org. Default: hostmaster.<zone>
+			if !c.NextArg() {
+				return zone, c.ArgErr()
+			}
+			zone.Mailbox = c.Val()
 		default:
 			return zone, c.Errf("unknown zone directive '%s'", directive)
 		}
