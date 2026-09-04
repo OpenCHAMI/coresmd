@@ -213,12 +213,12 @@ func parseZone(c *caddy.Controller, zoneName string) (Zone, error) {
 			zone.NodePattern = c.Val()
 			seenNodes = true
 		case "ns":
-			// Primary nameserver name used in SOA MNAME and the apex NS record
-			// for zone transfers. Default: ns.<zone>
+			// Nameserver names used in SOA MNAME and the apex NS records
+			// for zone transfers. May be specified multiple times. Default: ns.<zone>
 			if !c.NextArg() {
 				return zone, c.ArgErr()
 			}
-			zone.NS = c.Val()
+			zone.NS = append(zone.NS, c.Val())
 		case "mailbox":
 			// SOA RNAME, e.g. hostmaster.example.org. Default: hostmaster.<zone>
 			if !c.NextArg() {

@@ -62,7 +62,7 @@ func (p Plugin) Transfer(zone string, serial uint32) (<-chan []dns.RR, error) {
 			ch <- []dns.RR{soa}
 			return
 		}
-		ch <- []dns.RR{soa, p.nsRecord(z)}
+		ch <- append([]dns.RR{soa}, p.nsRecords(z)...)
 		rrs := p.zoneRecords(z)
 		// Send in modest batches; the transfer plugin packs them into envelopes.
 		for i := 0; i < len(rrs); i += 100 {
@@ -95,11 +95,15 @@ func fqdn(name string) string {
 	return dns.Fqdn(strings.ToLower(name))
 }
 
-func (p Plugin) nsName(z *Zone) string {
-	if z.NS != "" {
-		return fqdn(z.NS)
+func (p Plugin) nsNames(z *Zone) []string {
+	if len(z.NS) > 0 {
+		names := make([]string, 0, len(z.NS))
+		for _, ns := range z.NS {
+			names = append(names, fqdn(ns))
+		}
+		return names
 	}
-	return fqdn(xfrDefaultNS + "." + z.Name)
+	return []string{fqdn(xfrDefaultNS + "." + z.Name)}
 }
 
 func (p Plugin) mboxName(z *Zone) string {
@@ -112,7 +116,7 @@ func (p Plugin) mboxName(z *Zone) string {
 func (p Plugin) soaRecord(z *Zone, serial uint32) *dns.SOA {
 	return &dns.SOA{
 		Hdr:     dns.RR_Header{Name: fqdn(z.Name), Rrtype: dns.TypeSOA, Class: dns.ClassINET, Ttl: xfrTTL},
-		Ns:      p.nsName(z),
+		Ns:      p.nsNames(z)[0],
 		Mbox:    p.mboxName(z),
 		Serial:  serial,
 		Refresh: soaRefresh,
@@ -122,11 +126,16 @@ func (p Plugin) soaRecord(z *Zone, serial uint32) *dns.SOA {
 	}
 }
 
-func (p Plugin) nsRecord(z *Zone) *dns.NS {
-	return &dns.NS{
-		Hdr: dns.RR_Header{Name: fqdn(z.Name), Rrtype: dns.TypeNS, Class: dns.ClassINET, Ttl: xfrTTL},
-		Ns:  p.nsName(z),
+func (p Plugin) nsRecords(z *Zone) []dns.RR {
+	names := p.nsNames(z)
+	rrs := make([]dns.RR, len(names))
+	for i, name := range names {
+		rrs[i] = &dns.NS{
+			Hdr: dns.RR_Header{Name: fqdn(z.Name), Rrtype: dns.TypeNS, Class: dns.ClassINET, Ttl: xfrTTL},
+			Ns:  name,
+		}
 	}
+	return rrs
 }
 
 // zoneRecords builds the full A/AAAA record set for one zone from the SMD
