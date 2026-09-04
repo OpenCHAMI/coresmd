@@ -143,6 +143,52 @@ func (p Plugin) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) 
 		log.Debugf("PTR record cache miss for %s in zone %s", qName, zone)
 		CacheMisses.WithLabelValues(server, zone, "PTR").Inc()
 
+	case dns.TypeSOA:
+		// Handle SOA queries for configured zone apexes.
+		z := p.findConfiguredZone(qName)
+		if z != nil {
+			serial := uint32(0)
+			if p.xfr != nil {
+				p.xfr.mu.RLock()
+				serial = p.xfr.serial
+				p.xfr.mu.RUnlock()
+			}
+			log.Debugf("SOA record lookup succeeded: %s", qName)
+			msg := new(dns.Msg)
+			msg.SetReply(r)
+			msg.Authoritative = true
+			msg.Answer = append(msg.Answer, p.soaRecord(z, serial))
+			if err := w.WriteMsg(msg); err != nil {
+				log.Errorf("Failed to write SOA record response for %s: %v", qName, err)
+				return dns.RcodeServerFailure, err
+			}
+
+			RequestCount.WithLabelValues(server, zone, "SOA").Inc()
+			RequestDuration.WithLabelValues(server, zone).Observe(time.Since(start).Seconds())
+			return dns.RcodeSuccess, nil
+		}
+		log.Debugf("SOA record lookup miss for %s in zone %s", qName, zone)
+
+	case dns.TypeNS:
+		// Handle NS queries for configured zone apexes.
+		z := p.findConfiguredZone(qName)
+		if z != nil {
+			log.Debugf("NS record lookup succeeded: %s", qName)
+			msg := new(dns.Msg)
+			msg.SetReply(r)
+			msg.Authoritative = true
+			msg.Answer = append(msg.Answer, p.nsRecords(z)...)
+			if err := w.WriteMsg(msg); err != nil {
+				log.Errorf("Failed to write NS record response for %s: %v", qName, err)
+				return dns.RcodeServerFailure, err
+			}
+
+			RequestCount.WithLabelValues(server, zone, "NS").Inc()
+			RequestDuration.WithLabelValues(server, zone).Observe(time.Since(start).Seconds())
+			return dns.RcodeSuccess, nil
+		}
+		log.Debugf("NS record lookup miss for %s in zone %s", qName, zone)
+
 	default:
 		// Record metrics for other query types
 		RequestCount.WithLabelValues(server, zone, "other").Inc()
