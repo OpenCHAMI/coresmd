@@ -45,4 +45,10 @@
 
     # Forward all other queries to Google's DNS servers
     forward . 8.8.8.8
+
+    # Transfer zone records to another DNS
+    transfer cluster.local {
+        # The DNS to transfer records to (see https://coredns.io/plugins/transfer/)
+        to 192.168.1.5
+    }
 }

@@ -26,6 +26,7 @@ import (
 	_ "github.com/coredns/coredns/plugin/reload"
 	_ "github.com/coredns/coredns/plugin/root"
 	_ "github.com/coredns/coredns/plugin/template"
+	_ "github.com/coredns/coredns/plugin/transfer"
 	_ "github.com/coredns/coredns/plugin/whoami"
 	_ "github.com/coredns/rrl/plugins/rrl"
 	_ "github.com/ori-edge/k8s_gateway"
@@ -48,6 +49,7 @@ var directives = []string{
 	// Standard plugins (add/remove as needed)
 	"header",
 	"forward",
+	"transfer",
 	"cache",
 	"reload",
 	"loadbalance",
