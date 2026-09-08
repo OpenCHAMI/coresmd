@@ -9,8 +9,8 @@ import "strings"
 
 // Zone represents a DNS zone configuration
 type Zone struct {
-	Name        string // Zone name (e.g., "cluster.local")
-	NodePattern string // Pattern for node records (e.g., "nid{04d}.cluster.local")
+	Name        string   // Zone name (e.g., "cluster.local")
+	NodePattern string   // Pattern for node records (e.g., "nid{04d}.cluster.local")
 	NS          []string // Optional: nameservers for SOA/NS in zone transfers
 	Mailbox     string   // Optional: SOA RNAME (hostmaster address as a DNS name)
 }
