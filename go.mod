@@ -13,12 +13,12 @@ require (
 	github.com/coredns/coredns v1.14.7
 	github.com/coredns/rrl v0.0.0-20250915113509-ac1135e077ba
 	github.com/insomniacslk/dhcp v0.0.0-20251020182700-175e84fbb167
-	github.com/mattn/go-sqlite3 v1.14.50
+	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/miekg/dns v1.1.73
 	github.com/ori-edge/k8s_gateway v0.4.0
 	github.com/pin/tftp/v3 v3.2.0
 	github.com/prometheus/client_golang v1.24.1
-	github.com/sirupsen/logrus v1.10.1
+	github.com/sirupsen/logrus v1.10.2
 )
 
 require (
@@ -86,7 +86,7 @@ require (
 	go.uber.org/mock v0.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
