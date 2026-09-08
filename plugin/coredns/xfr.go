@@ -220,6 +220,38 @@ func (p Plugin) zoneHash() [32]byte {
 	return out
 }
 
+// runSerialUpdate recomputes the zone hash, bumps the SOA serial if the data
+// changed, and sends NOTIFY to the hosts configured in the transfer plugin's
+// "to" directive. It returns whether the serial changed and the current serial.
+func (p Plugin) runSerialUpdate() (bool, uint32) {
+	h := p.zoneHash()
+	p.xfr.mu.Lock()
+	changed := h != p.xfr.hash
+	if changed {
+		s := uint32(time.Now().Unix())
+		if s <= p.xfr.serial {
+			s = p.xfr.serial + 1
+		}
+		p.xfr.serial = s
+		p.xfr.hash = h
+	}
+	serial := p.xfr.serial
+	xfer := p.xfr.xfer
+	p.xfr.mu.Unlock()
+
+	if changed {
+		log.Infof("zone data changed, SOA serial is now %d", serial)
+		if xfer != nil {
+			for i := range p.zones {
+				if err := xfer.Notify(fqdn(p.zones[i].Name)); err != nil {
+					log.Warnf("NOTIFY for %s failed: %v", p.zones[i].Name, err)
+				}
+			}
+		}
+	}
+	return changed, serial
+}
+
 // startSerialWatcher bumps the SOA serial whenever the record set changes and
 // sends NOTIFY to the hosts listed in the transfer plugin's "to" directive.
 // It runs at the same cadence as the SMD cache refresh.
@@ -227,42 +259,15 @@ func (p Plugin) startSerialWatcher(interval time.Duration) {
 	if p.xfr == nil {
 		return
 	}
-	update := func() {
-		h := p.zoneHash()
-		p.xfr.mu.Lock()
-		changed := h != p.xfr.hash
-		if changed {
-			s := uint32(time.Now().Unix())
-			if s <= p.xfr.serial {
-				s = p.xfr.serial + 1
-			}
-			p.xfr.serial = s
-			p.xfr.hash = h
-		}
-		serial := p.xfr.serial
-		xfer := p.xfr.xfer
-		p.xfr.mu.Unlock()
-
-		if changed {
-			log.Infof("zone data changed, SOA serial is now %d", serial)
-			if xfer != nil {
-				for i := range p.zones {
-					if err := xfer.Notify(fqdn(p.zones[i].Name)); err != nil {
-						log.Warnf("NOTIFY for %s failed: %v", p.zones[i].Name, err)
-					}
-				}
-			}
-		}
-	}
 
 	go func() {
 		// Give the cache a moment to do its initial fill before the first hash.
 		time.Sleep(2 * time.Second)
-		update()
+		p.runSerialUpdate()
 		t := time.NewTicker(interval)
 		defer t.Stop()
 		for range t.C {
-			update()
+			p.runSerialUpdate()
 		}
 	}()
 }
