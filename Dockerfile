@@ -9,7 +9,7 @@ FROM docker.io/chainguard/wolfi-base:latest
 # Include curl and tini in the final image.
 RUN set -ex \
     && apk update \
-    && apk add --no-cache curl tini jq dhcping \
+    && apk add --no-cache curl tini jq dhcping libcap-utils \
     && rm -rf /var/cache/apk/*  \
     && rm -rf /tmp/*
 
@@ -27,6 +27,9 @@ RUN set -ex \
 # container runtime configuration and provide a volume with the appropriate configuration file.
 COPY coredhcp /coredhcp
 COPY coredns /coredns
+
+RUN setcap 'cap_net_bind_service,cap_net_raw,cap_net_admin+ep' /coredhcp \
+    && setcap 'cap_net_bind_service+ep' /coredns
 
 
 CMD [ "/coredhcp" ]
