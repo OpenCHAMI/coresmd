@@ -28,6 +28,9 @@ RUN set -ex \
 COPY coredhcp /coredhcp
 COPY coredns /coredns
 
+RUN setcap 'cap_net_bind_service,cap_net_raw,cap_net_admin+ep' /coredhcp \
+    && setcap 'cap_net_bind_service,cap_net_raw,cap_net_admin+ep' /coredns
+
 
 CMD [ "/coredhcp" ]
 
