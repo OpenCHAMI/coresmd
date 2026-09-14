@@ -13,91 +13,39 @@ on:
         type: string
 
 permissions:
-  contents: write # For creating temporary local Git tags
-  packages: write # For pushing PR containers
+  contents: write
+  packages: write
+  id-token: write
+  attestations: write
 
 jobs:
-  build-goreleaser:
-    # GoReleaser requires Docker Buildx, which is unavailable on the
-    # unprivileged ubuntu-slim runner.
+  config:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    outputs:
+      rpm-unsigned: ${{ steps.names.outputs.rpm-unsigned }}
+      rpm-signed:   ${{ steps.names.outputs.rpm-signed }}
+      keys-public:  ${{ steps.names.outputs.keys-public }}
     steps:
-      - name: Install build dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y --no-install-recommends \
-            gcc-aarch64-linux-gnu \
-            libc6-dev-arm64-cross
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-        with:
-          fetch-tags: 1
-          fetch-depth: 0
-          ref: "${{ inputs.pr_number != '' && format('refs/pull/{0}/head', inputs.pr_number) || '' }}"
-
-      - name: Set up Go
-        uses: actions/setup-go@v7.0.0
-        with:
-          go-version-file: go.mod
-
-      - name: Create tag for PR build
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          PR_NUM="${{ github.event.number }}"
-          if [[ "${{ inputs.pr_number }}" != "" ]]; then
-            PR_NUM="${{ inputs.pr_number }}"
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            PR_NUM="manual-${{ github.run_number }}"
-          fi
-          git tag -f -a "v0.0.0-pr-${PR_NUM}" -m "pr-${PR_NUM} Build"
-          echo "DOCKER_TAG=pr-${PR_NUM}" >> "${GITHUB_ENV}"
-
-      - name: Set build environment variables
+      - id: names
         run: |
           {
-            echo "GO_VERSION=$(go version | awk '{print $3}')"
-            echo "BUILD_HOST=$(hostname)"
-            echo "BUILD_USER=$(whoami)"
-            echo "CGO_ENABLED=1"
-            echo "IS_PR_BUILD=true"
-          } >> "${GITHUB_ENV}"
+            echo "rpm-unsigned=rpms-unsigned"
+            echo "rpm-signed=rpms-signed"
+            echo "keys-public=gpg-public-keys"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Check if fork PR
-        run: |
-          if [[ "${{ github.event_name }}" == "pull_request" && \
-                "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
-            echo "SKIP_CONTAINER_PUBLISH=true" >> "${GITHUB_ENV}"
-            echo "::warning title=Fork PR - Container Publish Skipped::Containers will be built but not published for fork PRs due to GitHub security restrictions."
-          else
-            echo "SKIP_CONTAINER_PUBLISH=false" >> "${GITHUB_ENV}"
-          fi
+  build-goreleaser:
+    name: Release with Goreleaser
+    uses: OpenCHAMI/github-actions/.github/workflows/build-publish-container-goreleaser.yml@v3.9
+    with:
+      build_deps: gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+      cgo_enabled: 1
+      is_pr_build: true
+      go_version_file: go.mod
+      registry_subject_name: ghcr.io/openchami/coresmd
+      pr_number: ${{ inputs.pr_number || github.event.pull_request.number || 0 }}
 
-      - name: GHCR login
-        if: env.SKIP_CONTAINER_PUBLISH == 'false'
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build with GoReleaser
-        uses: goreleaser/goreleaser-action@v7
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          version: '~> v2'
-          args: release --clean --skip announce,validate${{ env.SKIP_CONTAINER_PUBLISH == 'true' && ',publish' || '' }}
-
-  build-make-binaries:
+  build-makefile-binaries:
     runs-on: ubuntu-slim
     timeout-minutes: 15
     steps:
@@ -118,7 +66,7 @@ jobs:
       - name: Build with Make
         run: make
 
-  build-make-container-multistage:
+  build-makefile-container-multistage:
     # Container builds require a Docker daemon, which is unavailable on the
     # unprivileged ubuntu-slim runner.
     runs-on: ubuntu-latest
@@ -138,13 +86,54 @@ jobs:
     if: ${{ always() }}
     needs:
       - build-goreleaser
-      - build-make-binaries
-      - build-make-container-multistage
+      - build-makefile-binaries
+      - build-makefile-container-multistage
     runs-on: ubuntu-slim
     timeout-minutes: 5
     steps:
       - name: Verify build jobs passed
         run: |
           [[ "${{ needs.build-goreleaser.result }}" == "success" ]]
-          [[ "${{ needs.build-make-binaries.result }}" == "success" ]]
-          [[ "${{ needs.build-make-container-multistage.result }}" == "success" ]]
+          [[ "${{ needs.build-makefile-binaries.result }}" == "success" ]]
+          [[ "${{ needs.build-makefile-container-multistage.result }}" == "success" ]]
+
+
+  rpmbuild:
+    needs: [config, build]
+    uses: OpenCHAMI/github-actions/.github/workflows/build-rpm-quadlet.yml@v3.9
+    secrets: inherit
+    with:
+      artifact-name-unsigned-rpms: ${{ needs.config.outputs.rpm-unsigned }}
+
+  rpmsign:
+    needs: [config, rpmbuild]
+    uses: OpenCHAMI/github-actions/.github/workflows/gpg-sign-artifacts.yml@v3.9
+    secrets: inherit
+    with:
+      artifact-name-unsigned-rpms: ${{ needs.config.outputs.rpm-unsigned }}
+      artifact-name-signed-rpms:   ${{ needs.config.outputs.rpm-signed }}
+      artifact-name-public-keys:   ${{ needs.config.outputs.keys-public }}
+
+  rpmvalidate:
+    needs: [config, rpmsign]
+    uses: OpenCHAMI/github-actions/.github/workflows/validate-rpm-quadlet.yml@v3.9
+    secrets: inherit
+    with:
+      artifact-name-signed-rpms:   ${{ needs.config.outputs.rpm-signed }}
+      rpms: |
+        - name: coresmd-*.rpm
+          files:
+            - /etc/openchami
+            - /etc/openchami/configs
+            - /etc/openchami/configs/coredhcp.yaml
+            - /etc/openchami/configs/Corefile
+            - /usr/share/containers/systemd/coresmd-.container.d
+            - /usr/share/containers/systemd/coresmd-.container.d/10-defaults.conf
+            - /usr/share/containers/systemd/coresmd-coredhcp.container
+            - /usr/share/containers/systemd/coresmd-coredhcp.container.d
+            - /usr/share/containers/systemd/coresmd-coredhcp.container.d/10-defaults.conf
+            - /usr/share/containers/systemd/coresmd-coredns.container
+            - /usr/share/containers/systemd/coresmd-coredns.container.d
+            - /usr/share/containers/systemd/coresmd-coredns.container.d/10-defaults.conf
+            - /usr/share/licenses/coresmd-quadlet
+            - /usr/share/licenses/coresmd-quadlet/MIT.txt
