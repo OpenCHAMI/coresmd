@@ -82,8 +82,7 @@ builds:
 
 dockers:
   - image_templates:
-      # For PR builds use custom tag from env, for releases use semantic versioning
-      - &amd64_linux_image "ghcr.io/openchami/{{.ProjectName}}:{{ if eq .Env.IS_PR_BUILD \"true\" }}{{ .Env.DOCKER_TAG }}{{ else }}{{ .Tag }}{{ end }}-amd64"
+      - &amd64_linux_image "ghcr.io/openchami/{{.ProjectName}}:{{ .Tag }}-amd64"
       - "{{ if ne .Env.IS_PR_BUILD \"true\" }}ghcr.io/openchami/{{.ProjectName}}:{{ .Major }}-amd64{{ end }}"
       - "{{ if ne .Env.IS_PR_BUILD \"true\" }}ghcr.io/openchami/{{.ProjectName}}:{{ .Major }}.{{ .Minor }}-amd64{{ end }}"
     use: buildx
@@ -101,7 +100,7 @@ dockers:
       - README.md
 
   - image_templates:
-      - &arm64v8_linux_image "ghcr.io/openchami/{{.ProjectName}}:{{ if eq .Env.IS_PR_BUILD \"true\" }}{{ .Env.DOCKER_TAG }}{{ else }}{{ .Tag }}{{ end }}-arm64"
+      - &arm64v8_linux_image "ghcr.io/openchami/{{.ProjectName}}:{{ .Tag }}-arm64"
       - "{{ if ne .Env.IS_PR_BUILD \"true\" }}ghcr.io/openchami/{{.ProjectName}}:{{ .Major }}-arm64{{ end }}"
       - "{{ if ne .Env.IS_PR_BUILD \"true\" }}ghcr.io/openchami/{{.ProjectName}}:{{ .Major }}.{{ .Minor }}-arm64{{ end }}"
     use: buildx
@@ -125,7 +124,7 @@ docker_manifests:
       - *amd64_linux_image
       - *arm64v8_linux_image
 
-  - name_template: "ghcr.io/openchami/{{.ProjectName}}:{{ if eq .Env.IS_PR_BUILD \"true\" }}{{ .Env.DOCKER_TAG }}{{ else }}{{ .Tag }}{{ end }}"
+  - name_template: "ghcr.io/openchami/{{.ProjectName}}:{{ .Tag }}"
     image_templates:
       - *amd64_linux_image
       - *arm64v8_linux_image
