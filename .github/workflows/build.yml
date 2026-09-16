@@ -128,12 +128,12 @@ jobs:
             - /etc/openchami/configs/coredhcp.yaml
             - /etc/openchami/configs/Corefile
             - /usr/share/containers/systemd/coresmd-.container.d
-            - /usr/share/containers/systemd/coresmd-.container.d/10-defaults.conf
+            - /usr/share/containers/systemd/coresmd-.container.d/10-defaults-shared.conf
             - /usr/share/containers/systemd/coresmd-coredhcp.container
             - /usr/share/containers/systemd/coresmd-coredhcp.container.d
-            - /usr/share/containers/systemd/coresmd-coredhcp.container.d/10-defaults.conf
+            - /usr/share/containers/systemd/coresmd-coredhcp.container.d/10-defaults-service.conf
             - /usr/share/containers/systemd/coresmd-coredns.container
             - /usr/share/containers/systemd/coresmd-coredns.container.d
-            - /usr/share/containers/systemd/coresmd-coredns.container.d/10-defaults.conf
+            - /usr/share/containers/systemd/coresmd-coredns.container.d/10-defaults-service.conf
             - /usr/share/licenses/coresmd-quadlet
             - /usr/share/licenses/coresmd-quadlet/MIT.txt
