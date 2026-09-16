@@ -8,6 +8,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   reuse:
     uses: OpenCHAMI/github-actions/.github/workflows/reuse.yml@c64b0b92899cdf2b24a5d6663d98db3ff37f8d84 # seantronsen/feat/add-missing-workflows
