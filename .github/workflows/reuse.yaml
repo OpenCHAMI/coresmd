@@ -13,4 +13,4 @@ permissions:
 
 jobs:
   reuse:
-    uses: OpenCHAMI/github-actions/.github/workflows/reuse.yml@c64b0b92899cdf2b24a5d6663d98db3ff37f8d84 # seantronsen/feat/add-missing-workflows
+    uses: OpenCHAMI/github-actions/.github/workflows/reuse.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11

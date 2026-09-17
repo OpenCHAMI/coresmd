@@ -36,7 +36,7 @@ jobs:
 
   build-goreleaser:
     name: Release with Goreleaser
-    uses: OpenCHAMI/github-actions/.github/workflows/build-publish-container-goreleaser.yml@c64b0b92899cdf2b24a5d6663d98db3ff37f8d84 # seantronsen/feat/add-missing-workflows
+    uses: OpenCHAMI/github-actions/.github/workflows/build-publish-container-goreleaser.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
     with:
       build_deps: gcc-aarch64-linux-gnu libc6-dev-arm64-cross
       cgo_enabled: 1
@@ -100,14 +100,14 @@ jobs:
 
   rpmbuild:
     needs: [config, build]
-    uses: OpenCHAMI/github-actions/.github/workflows/build-rpm-quadlet.yml@c64b0b92899cdf2b24a5d6663d98db3ff37f8d84 # seantronsen/feat/add-missing-workflows
+    uses: OpenCHAMI/github-actions/.github/workflows/build-rpm-quadlet.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
     secrets: inherit
     with:
       artifact-name-unsigned-rpms: ${{ needs.config.outputs.rpm-unsigned }}
 
   rpmsign:
     needs: [config, rpmbuild]
-    uses: OpenCHAMI/github-actions/.github/workflows/gpg-sign-artifacts.yml@c64b0b92899cdf2b24a5d6663d98db3ff37f8d84 # seantronsen/feat/add-missing-workflows
+    uses: OpenCHAMI/github-actions/.github/workflows/gpg-sign-artifacts.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
     secrets: inherit
     with:
       artifact-name-unsigned-rpms: ${{ needs.config.outputs.rpm-unsigned }}
@@ -116,7 +116,7 @@ jobs:
 
   rpmvalidate:
     needs: [config, rpmsign]
-    uses: OpenCHAMI/github-actions/.github/workflows/validate-rpm-quadlet.yml@c64b0b92899cdf2b24a5d6663d98db3ff37f8d84 # seantronsen/feat/add-missing-workflows
+    uses: OpenCHAMI/github-actions/.github/workflows/validate-rpm-quadlet.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
     secrets: inherit
     with:
       artifact-name-signed-rpms:   ${{ needs.config.outputs.rpm-signed }}
