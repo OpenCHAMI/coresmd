@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-name: REUSE
+name: reuse
 on:
   pull_request:
   push:

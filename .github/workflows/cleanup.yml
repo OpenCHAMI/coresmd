@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-name: Cleanup
+name: cleanup
 on:
   pull_request:
     types: [closed]

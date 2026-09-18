@@ -35,7 +35,6 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   build-goreleaser:
-    name: Release with Goreleaser
     uses: OpenCHAMI/github-actions/.github/workflows/build-publish-container-goreleaser.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
     with:
       build_deps: gcc-aarch64-linux-gnu libc6-dev-arm64-cross
@@ -82,7 +81,6 @@ jobs:
         run: make container
 
   build:
-    name: build
     if: ${{ always() }}
     needs:
       - build-goreleaser
