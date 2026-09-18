@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-name: Scorecard
+name: scorecard
 on:
   branch_protection_rule:
   pull_request:
