@@ -1,35 +1,30 @@
-# SPDX-FileCopyrightText: © 2024-2025 Triad National Security, LLC.
 # SPDX-FileCopyrightText: © 2026 OpenCHAMI a Series of LF Projects, LLC
 #
 # SPDX-License-Identifier: MIT
 
 name: test
-
-permissions:
-  contents: read
-
 on:
+  pull_request:
   push:
     branches:
       - main
-  pull_request:
+
+permissions:
+  contents: read
+  packages: read
 
 jobs:
+  check:
+    uses: OpenCHAMI/github-actions/.github/workflows/test-go.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
+    with:
+      go_version_file: go.mod
+      test-command: make test
+
   test:
-    name: test
+    if: ${{ always() }}
+    needs: [check]
     runs-on: ubuntu-slim
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-        with:
-          fetch-tags: 1
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@v7.0.0
-        with:
-          go-version-file: go.mod
-
-      - name: Run Go unit tests
-        run: make test
+      - run: |
+          [[ "${{ needs.check.result }}" == "success" ]]

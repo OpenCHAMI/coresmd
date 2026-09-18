@@ -79,6 +79,16 @@ BUILDHOST     := $(shell $(HOSTCMD))
 BUILDUSER     := $(shell whoami)
 CONTAINER_TAG ?= latest
 FQCN          ?= ghcr.io/openchami/$(NAME):$(CONTAINER_TAG)
+
+# RPM version/release: strip the leading 'v' and drop git-describe's
+# '-N-gHASH[-dirty]' suffix (hyphens aren't allowed in an RPM Version
+# field anyway). An exact tag like v0.1.2 becomes 0.1.2.
+RPMBUILD    ?= $(shell command -v rpmbuild 2>/dev/null)
+RPM_VERSION ?= $(shell echo "$(VERSION)" | sed -e 's/^v//' -e 's/-.*//')
+RPM_RELEASE ?= 1
+RPM_NAME    ?= $(NAME)-quadlet
+RPM_TOPDIR  ?= $(CURDIR)/dist/rpmbuild
+RPM_SRCDIR  := $(RPM_TOPDIR)/SOURCES/$(RPM_NAME)-$(RPM_VERSION)
 LDFLAGS := -s \
 	   -X '$(IMPORT)internal/version.Version=$(VERSION)' \
 	   -X '$(IMPORT)internal/version.Tag=$(TAG)' \
@@ -154,6 +164,26 @@ goreleaser-release: ## Run `goreleaser release` (accepts GORELEASER_OPTS)
 .PHONY: goreleaser-clean
 goreleaser-clean: ## Clean Goreleaser files (remove dist/)
 	$(RM) -rf dist/
+
+.PHONY: rpm-build
+rpm-build: ## Build the CoreSMD quadlet RPM (accepts VERSION, RPM_VERSION, RPM_RELEASE, RPM_TOPDIR)
+	$(call require-command-shell,$(RPMBUILD),rpmbuild)
+	$(RM) -rf $(RPM_TOPDIR)
+	mkdir -p $(RPM_SRCDIR)/LICENSES
+	cp -rL packaging/rpm-quadlet/systemd/* $(RPM_SRCDIR)/
+	cp -rL packaging/rpm-quadlet/configs/* $(RPM_SRCDIR)/
+	cp LICENSES/MIT.txt $(RPM_SRCDIR)/LICENSES/
+	tar -C $(RPM_TOPDIR)/SOURCES -czf $(RPM_TOPDIR)/SOURCES/$(RPM_NAME)-$(RPM_VERSION).tar.gz \
+		$(RPM_NAME)-$(RPM_VERSION)
+	$(RPMBUILD) --define "_topdir $(RPM_TOPDIR)" \
+		--define "version $(RPM_VERSION)" \
+		--define "rel $(RPM_RELEASE)" \
+		-bb packaging/rpm-quadlet/$(RPM_NAME).spec
+	@echo "Built: $(RPM_TOPDIR)/RPMS/noarch/$$(ls $(RPM_TOPDIR)/RPMS/noarch)"
+
+.PHONY: rpm-clean
+rpm-clean: ## Remove local RPM build artifacts
+	$(RM) -rf $(RPM_TOPDIR)
 
 .PHONY: reuse
 reuse: ## Check REUSE compliance

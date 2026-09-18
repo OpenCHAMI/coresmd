@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 name: coverage
-
 on:
   pull_request:
   push:
@@ -14,37 +13,19 @@ permissions:
   contents: read
 
 jobs:
+  check:
+    uses: OpenCHAMI/github-actions/.github/workflows/coverage-go.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
+    secrets: inherit
+    with:
+      go_version_file: go.mod
+      coverage-command: make coverage
+      coverage-file: coverage.out
+
   coverage:
-    name: coverage
+    if: ${{ always() }}
+    needs: [check]
     runs-on: ubuntu-slim
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-
-      - name: Set up Go
-        uses: actions/setup-go@v7.0.0
-        with:
-          go-version-file: go.mod
-
-      - name: Run tests with coverage
-        run: make coverage
-
-      - name: Report coverage
-        run: |
-          TOTAL=$(go tool cover -func=coverage.out | awk '/^total:/ {print $3}')
-          echo "Total coverage: ${TOTAL}"
-          echo "Total coverage: ${TOTAL}" >> "${GITHUB_STEP_SUMMARY}"
-
-      - name: Install Coveralls dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y --no-install-recommends curl
-
-      - name: Upload coverage to Coveralls
-        uses: coverallsapp/github-action@8d6379e14d29928660c4ba802d8e85393440b329 # v2.3.8
-        with:
-          coverage-reporter-version: v0.6.22
-          file: coverage.out
-          format: golang
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          [[ "${{ needs.check.result }}" == "success" ]]
