@@ -13,7 +13,16 @@ permissions:
   contents: read
 
 jobs:
-  lint:
+  check:
     uses: OpenCHAMI/github-actions/.github/workflows/lint-go.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
     with:
       go_version_file: go.mod
+
+  lint:
+    if: ${{ always() }}
+    needs: [check]
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - run: |
+          [[ "${{ needs.check.result }}" == "success" ]]

@@ -13,5 +13,14 @@ permissions:
   contents: read
 
 jobs:
-  govulncheck:
+  check:
     uses: OpenCHAMI/github-actions/.github/workflows/govulncheck.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
+
+  govulncheck:
+    if: ${{ always() }}
+    needs: [check]
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - run: |
+          [[ "${{ needs.check.result }}" == "success" ]]

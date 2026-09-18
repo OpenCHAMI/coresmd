@@ -17,5 +17,14 @@ permissions:
   id-token: write
 
 jobs:
-  scorecard:
+  check:
     uses: OpenCHAMI/github-actions/.github/workflows/scorecard.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
+
+  scorecard:
+    if: ${{ always() }}
+    needs: [check]
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - run: |
+          [[ "${{ needs.check.result }}" == "success" ]]
