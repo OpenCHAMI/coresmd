@@ -89,12 +89,8 @@ jobs:
     runs-on: ubuntu-slim
     timeout-minutes: 5
     steps:
-      - name: Verify build jobs passed
-        run: |
-          [[ "${{ needs.build-goreleaser.result }}" == "success" ]]
-          [[ "${{ needs.build-makefile-binaries.result }}" == "success" ]]
-          [[ "${{ needs.build-makefile-container-multistage.result }}" == "success" ]]
-
+      - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+        with: { jobs: "${{ toJSON(needs) }}" }
 
   rpmbuild:
     needs: [config, build]
