@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: 2026 OpenCHAMI Contributors
+# SPDX-License-Identifier: MIT
+
+[Unit]
+Description=The %N container
+Wants=smd.service tokensmith.service
+After=smd.service tokensmith.service
+PartOf=openchami.target
+
+[Container]
+ContainerName=%N
+HostName=%N
+Image=ghcr.io/openchami/coresmd:@IMAGE_TAG@
+
+[Service]
+Restart=always

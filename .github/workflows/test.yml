@@ -4,32 +4,27 @@
 # SPDX-License-Identifier: MIT
 
 name: test
-
-permissions:
-  contents: read
-
 on:
+  pull_request:
   push:
     branches:
       - main
-  pull_request:
+
+permissions:
+  contents: read
+  packages: read
 
 jobs:
+  check:
+    uses: OpenCHAMI/github-actions/.github/workflows/test-go.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
+    with:
+      go_version_file: go.mod
+      test-command: make test
+
   test:
-    name: test
+    if: ${{ always() }}
+    needs: [check]
     runs-on: ubuntu-slim
-    timeout-minutes: 15
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-        with:
-          fetch-tags: 1
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@v7.0.0
-        with:
-          go-version-file: go.mod
-
-      - name: Run Go unit tests
-        run: make test
+      - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+        with: { jobs: "${{ toJSON(needs) }}" }

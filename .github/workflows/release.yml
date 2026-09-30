@@ -18,99 +18,58 @@ permissions:
   attestations: write
 
 jobs:
-  release:
-    # Releases require Docker Buildx, which is unavailable on the unprivileged
-    # ubuntu-slim runner.
+
+  config:
     runs-on: ubuntu-latest
-    name: Release with Goreleaser
-    timeout-minutes: 45
+    outputs:
+      rpm-unsigned: ${{ steps.names.outputs.rpm-unsigned }}
+      rpm-signed:   ${{ steps.names.outputs.rpm-signed }}
+      keys-public:  ${{ steps.names.outputs.keys-public }}
     steps:
-      - name: Install build dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y --no-install-recommends \
-            gcc-aarch64-linux-gnu \
-            libc6-dev-arm64-cross
-
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-        with:
-          fetch-tags: 1
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@v7.0.0
-        with:
-          go-version-file: go.mod
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: GHCR login
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Generate release notes
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" -F tag_name="${{ github.ref_name }}" --jq .body > ../notes.md
-
-      - name: Set build environment variables
+      - id: names
         run: |
           {
-            echo "GO_VERSION=$(go version | awk '{print $3}')"
-            echo "BUILD_HOST=$(hostname)"
-            echo "BUILD_USER=$(whoami)"
-            echo "CGO_ENABLED=1"
-          } >> "${GITHUB_ENV}"
+            echo "rpm-unsigned=rpms-unsigned"
+            echo "rpm-signed=rpms-signed"
+            echo "keys-public=gpg-public-keys"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Release with GoReleaser
-        uses: goreleaser/goreleaser-action@v7
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          IS_PR_BUILD: 'false'
-        with:
-          version: '~> v2'
-          args: release --clean --release-notes ../notes.md
-        id: goreleaser
+  build-goreleaser:
+    uses: OpenCHAMI/github-actions/.github/workflows/build-publish-container-goreleaser.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
+    with:
+      build_deps: gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+      cgo_enabled: 1
+      is_pr_build: false
+      go_version_file: go.mod
+      registry_subject_name: ghcr.io/openchami/coresmd
+      release_draft: true
 
-      - name: Process GoReleaser output
-        id: process_goreleaser_output
-        run: |
-          {
-            echo "const fs = require('fs');"
-            echo 'const artifacts = ${{ steps.goreleaser.outputs.artifacts }}'
-            echo "const firstNonNullDigest = artifacts.find(artifact => artifact.extra && artifact.extra.Digest != null)?.extra.Digest;"
-            echo "console.log(firstNonNullDigest);"
-            echo "if (firstNonNullDigest) {"
-            echo "  fs.writeFileSync('digest.txt', firstNonNullDigest);"
-            echo "} else {"
-            echo "  console.error('No digest found in artifacts');"
-            echo "  process.exit(1);"
-            echo "}"
-          } > process.js
-          node process.js
-          echo "digest=$(cat digest.txt)" >> "${GITHUB_OUTPUT}"
+  rpmbuild:
+    needs: [config, build-goreleaser]
+    uses: OpenCHAMI/github-actions/.github/workflows/build-rpm-quadlet.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
+    secrets: inherit
+    with:
+      artifact-name-unsigned-rpms: ${{ needs.config.outputs.rpm-unsigned }}
 
-      - name: Attest coredhcp binary linux_amd64
-        uses: actions/attest-build-provenance@v4
-        with:
-          subject-path: dist/coredhcp_linux_amd64_v3/coredhcp
+  rpmsign:
+    needs: [config, rpmbuild]
+    uses: OpenCHAMI/github-actions/.github/workflows/gpg-sign-artifacts.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
+    secrets: inherit
+    with:
+      artifact-name-unsigned-rpms: ${{ needs.config.outputs.rpm-unsigned }}
+      artifact-name-signed-rpms: ${{ needs.config.outputs.rpm-signed }}
+      artifact-name-public-keys: ${{ needs.config.outputs.keys-public }}
 
-      - name: Attest coredhcp binary linux_arm64
-        uses: actions/attest-build-provenance@v4
-        with:
-          subject-path: dist/coredhcp_linux_arm64_v8.0/coredhcp
+  release:
+    needs: [config, rpmsign]
+    uses: OpenCHAMI/github-actions/.github/workflows/release-signed-artifacts.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
+    secrets: inherit
+    with:
+      artifact-name-signed-rpms: ${{ needs.config.outputs.rpm-signed }}
+      artifact-name-public-keys: ${{ needs.config.outputs.keys-public }}
+      release_draft: true
 
-      - name: Attest Docker container
-        uses: actions/attest-build-provenance@v4
-        with:
-          subject-name: ghcr.io/openchami/coresmd
-          subject-digest: ${{ steps.process_goreleaser_output.outputs.digest }}
-          push-to-registry: true
+  publish:
+    needs: release
+    uses: OpenCHAMI/github-actions/.github/workflows/publish-release.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
+    secrets: inherit
