@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: © 2026 OpenCHAMI a Series of LF Projects, LLC
+#
+# SPDX-License-Identifier: MIT
+
+name: stale
+on:
+  schedule:
+    - cron: '23 3 * * *'  # daily at 03:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stale:
+    uses: OpenCHAMI/github-actions/.github/workflows/stale.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
+    permissions:
+      issues: write          # label, comment on, and close stale issues
+      pull-requests: write   # label, comment on, and close stale PRs
