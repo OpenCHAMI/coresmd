@@ -1,0 +1,106 @@
+# SPDX-FileCopyrightText: © 2026 OpenCHAMI a Series of LF Projects, LLC
+#
+# SPDX-License-Identifier: MIT
+
+name: build-check
+
+# Proves everything builds and packages correctly, publishing nothing: Make
+# sanity builds gate a GoReleaser snapshot build, whose rpm/deb packages are
+# then validated. Read-only, so it also runs for fork PRs. PR images are
+# published by release.yml.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  make-binaries:
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-tags: 1
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install CoreDHCP generator
+        run: go install github.com/coredhcp/coredhcp/cmds/coredhcp-generator@latest
+
+      - name: Build with Make
+        run: make
+
+  make-container:
+    # Container builds require a Docker daemon, which is unavailable on the
+    # unprivileged ubuntu-slim runner.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-tags: 1
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Build container from source using multi-stage build
+        run: make container
+
+  goreleaser:
+    needs: [make-binaries, make-container]
+    uses: OpenCHAMI/github-actions/.github/workflows/build-check-goreleaser.yml@5b8f3decfae1c29ef4004a6f49f1593d25eccc95 # experimental: github-actions v4.0 pre-release (seantronsen/feat/redesign-deployment)
+    with:
+      build-deps: gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+      cgo-enabled: 1
+      go-version-file: go.mod
+
+  validate:
+    needs: goreleaser
+    uses: OpenCHAMI/github-actions/.github/workflows/validate-packages.yml@5b8f3decfae1c29ef4004a6f49f1593d25eccc95 # experimental: github-actions v4.0 pre-release (seantronsen/feat/redesign-deployment)
+    with:
+      packages: |
+        - name: coresmd-quadlet*.rpm
+          files:
+            - /etc/openchami
+            - /etc/openchami/configs
+            - /etc/openchami/configs/coredhcp.yaml
+            - /etc/openchami/configs/Corefile
+            - /usr/share/containers/systemd/coresmd-.container.d
+            - /usr/share/containers/systemd/coresmd-.container.d/10-defaults-shared.conf
+            - /usr/share/containers/systemd/coresmd-coredhcp.container
+            - /usr/share/containers/systemd/coresmd-coredhcp.container.d
+            - /usr/share/containers/systemd/coresmd-coredhcp.container.d/10-defaults-service.conf
+            - /usr/share/containers/systemd/coresmd-coredns.container
+            - /usr/share/containers/systemd/coresmd-coredns.container.d
+            - /usr/share/containers/systemd/coresmd-coredns.container.d/10-defaults-service.conf
+            - /usr/share/licenses/coresmd-quadlet
+            - /usr/share/licenses/coresmd-quadlet/MIT.txt
+        - name: coresmd-quadlet*.deb
+          files:
+            - /etc/openchami/configs/coredhcp.yaml
+            - /etc/openchami/configs/Corefile
+            - /usr/share/containers/systemd/coresmd-.container.d/10-defaults-shared.conf
+            - /usr/share/containers/systemd/coresmd-coredhcp.container
+            - /usr/share/containers/systemd/coresmd-coredhcp.container.d/10-defaults-service.conf
+            - /usr/share/containers/systemd/coresmd-coredns.container
+            - /usr/share/containers/systemd/coresmd-coredns.container.d/10-defaults-service.conf
+            - /usr/share/doc/coresmd-quadlet/copyright
+
+  # Required status check; keep the job name.
+  build:
+    if: ${{ always() }}
+    needs: [make-binaries, make-container, goreleaser, validate]
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+        with: { jobs: "${{ toJSON(needs) }}" }

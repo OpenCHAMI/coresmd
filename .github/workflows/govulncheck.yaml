@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   check:
-    uses: OpenCHAMI/github-actions/.github/workflows/govulncheck.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
+    uses: OpenCHAMI/github-actions/.github/workflows/govulncheck.yml@5b8f3decfae1c29ef4004a6f49f1593d25eccc95 # experimental: github-actions v4.0 pre-release (seantronsen/feat/redesign-deployment)
 
   govulncheck:
     if: ${{ always() }}

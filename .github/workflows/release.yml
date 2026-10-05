@@ -5,85 +5,122 @@
 
 name: release
 
+# One workflow for PR images and releases; build-release-goreleaser picks the
+# mode from the event:
+# - pull_request: pushes ghcr.io/openchami/coresmd:pr-<N> (fork PRs build but
+#   publish nothing) and scans it.
+# - v* tag push: GoReleaser publishes semver images, (signed) packages, and a
+#   draft GitHub release; packages are validated and the image scanned; the
+#   draft is published only once validation passes.
+
 on:
-  workflow_dispatch:
+  pull_request:
   push:
     tags:
       - v*
 
 permissions:
-  contents: read   # baseline; jobs that need more request it below
+  contents: read
 
 jobs:
-
-  config:
-    runs-on: ubuntu-latest
+  # TESTING ONLY: throwaway signing key so the pipeline can be exercised
+  # without exposing a real key. It is not a secret (it travels as a job
+  # output) and expires in a day; packages signed with it must not be
+  # trusted. Remove this job and switch back to a real key secret once
+  # deployment security is settled (see TODO below).
+  test-key:
+    runs-on: ubuntu-slim
     outputs:
-      rpm-unsigned: ${{ steps.names.outputs.rpm-unsigned }}
-      rpm-signed:   ${{ steps.names.outputs.rpm-signed }}
-      keys-public:  ${{ steps.names.outputs.keys-public }}
+      gpg-key-b64: ${{ steps.key.outputs.gpg-key-b64 }}
     steps:
-      - id: names
+      - name: Generate throwaway GPG key
+        id: key
         run: |
-          {
-            echo "rpm-unsigned=rpms-unsigned"
-            echo "rpm-signed=rpms-signed"
-            echo "keys-public=gpg-public-keys"
-          } >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          GNUPGHOME=$(mktemp -d)
+          export GNUPGHOME
+          gpg --batch --quiet --passphrase '' \
+            --quick-gen-key 'coresmd throwaway test key <noreply@openchami.org>' rsa3072 sign 1d
+          echo "gpg-key-b64=$(gpg --batch --armor --export-secret-keys | base64 -w0)" >> "$GITHUB_OUTPUT"
+          gpg --batch --list-keys --keyid-format long
 
-  build-goreleaser:
+  goreleaser:
+    needs: test-key
     permissions:
       contents: write      # release creation, uploading assets
       packages: write      # image push, container provenance
       id-token: write      # Sigstore signing (attest-build-provenance)
       attestations: write  # build provenance attestations
-    uses: OpenCHAMI/github-actions/.github/workflows/build-publish-container-goreleaser.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
+    uses: OpenCHAMI/github-actions/.github/workflows/build-release-goreleaser.yml@5b8f3decfae1c29ef4004a6f49f1593d25eccc95 # experimental: github-actions v4.0 pre-release (seantronsen/feat/redesign-deployment)
     with:
       build-deps: gcc-aarch64-linux-gnu libc6-dev-arm64-cross
       cgo-enabled: 1
-      is-pr-build: false
       go-version-file: go.mod
       registry-subject-name: ghcr.io/openchami/coresmd
-      release-draft: true
+    # TODO: spend a minute on proper deployment security. This is a stopgap:
+    # the key is only passed on tag pushes, so PR jobs (and the code they run)
+    # never receive it, but anyone with write access can still edit this
+    # workflow to read it. The simplest option by far was a pull server: a
+    # third-party server we manage pulls the packages over HTTPS, signs them,
+    # and publishes them to the distro repos, so no signing key lives in CI.
+    # If that stays off the table, the alternative is hardening in
+    # OpenCHAMI/github-actions (tag-only Environment, refusing the key on PRs)
+    # or central signing in a dedicated repo.
+    secrets:
+      # Throwaway test key (see test-key). Real key, once deployment security
+      # is settled: secrets.GPG_REPO_KEY_B64 / secrets.GPG_KEY_PASSPHRASE.
+      gpg-key: ${{ github.event_name == 'push' && needs.test-key.outputs.gpg-key-b64 || '' }}
+      gpg-key-passphrase: ''
+
+  validate:
+    # PR builds produce no packages (they're validated in build-check).
+    if: ${{ github.event_name == 'push' }}
+    needs: goreleaser
+    uses: OpenCHAMI/github-actions/.github/workflows/validate-packages.yml@5b8f3decfae1c29ef4004a6f49f1593d25eccc95 # experimental: github-actions v4.0 pre-release (seantronsen/feat/redesign-deployment)
+    with:
+      packages: |
+        - name: coresmd-quadlet*.rpm
+          files:
+            - /etc/openchami
+            - /etc/openchami/configs
+            - /etc/openchami/configs/coredhcp.yaml
+            - /etc/openchami/configs/Corefile
+            - /usr/share/containers/systemd/coresmd-.container.d
+            - /usr/share/containers/systemd/coresmd-.container.d/10-defaults-shared.conf
+            - /usr/share/containers/systemd/coresmd-coredhcp.container
+            - /usr/share/containers/systemd/coresmd-coredhcp.container.d
+            - /usr/share/containers/systemd/coresmd-coredhcp.container.d/10-defaults-service.conf
+            - /usr/share/containers/systemd/coresmd-coredns.container
+            - /usr/share/containers/systemd/coresmd-coredns.container.d
+            - /usr/share/containers/systemd/coresmd-coredns.container.d/10-defaults-service.conf
+            - /usr/share/licenses/coresmd-quadlet
+            - /usr/share/licenses/coresmd-quadlet/MIT.txt
+        - name: coresmd-quadlet*.deb
+          files:
+            - /etc/openchami/configs/coredhcp.yaml
+            - /etc/openchami/configs/Corefile
+            - /usr/share/containers/systemd/coresmd-.container.d/10-defaults-shared.conf
+            - /usr/share/containers/systemd/coresmd-coredhcp.container
+            - /usr/share/containers/systemd/coresmd-coredhcp.container.d/10-defaults-service.conf
+            - /usr/share/containers/systemd/coresmd-coredns.container
+            - /usr/share/containers/systemd/coresmd-coredns.container.d/10-defaults-service.conf
+            - /usr/share/doc/coresmd-quadlet/copyright
 
   trivy:
-    needs: [build-goreleaser]
-    if: ${{ startsWith(github.ref, 'refs/tags/') }}
-    uses: OpenCHAMI/github-actions/.github/workflows/trivy-image-scan.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
+    # Fork PRs build but don't push, so there is no image to scan.
+    needs: goreleaser
+    if: ${{ needs.goreleaser.outputs.digest != '' }}
+    uses: OpenCHAMI/github-actions/.github/workflows/trivy-image-scan.yml@5b8f3decfae1c29ef4004a6f49f1593d25eccc95 # experimental: github-actions v4.0 pre-release (seantronsen/feat/redesign-deployment)
     permissions:
       contents: read          # baseline for checkout
       security-events: write  # SARIF upload to GHAS
     with:
-      image-ref: ghcr.io/openchami/coresmd:${{ github.ref_name }}
+      image-ref: ghcr.io/openchami/coresmd@${{ needs.goreleaser.outputs.digest }}
       exit-code: '0'  # report only until the baseline is reviewed
 
-  rpmbuild:
-    needs: [config, build-goreleaser]
-    uses: OpenCHAMI/github-actions/.github/workflows/build-rpm-quadlet.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
-    with:
-      artifact-name-unsigned-rpms: ${{ needs.config.outputs.rpm-unsigned }}
-
-  rpmsign:
-    needs: [config, rpmbuild]
-    uses: OpenCHAMI/github-actions/.github/workflows/gpg-sign-artifacts.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
-    secrets: inherit  # zizmor: ignore[secrets-inherit] gpg-sign-artifacts reads GPG secrets it doesn't declare
-    with:
-      artifact-name-unsigned-rpms: ${{ needs.config.outputs.rpm-unsigned }}
-      artifact-name-signed-rpms: ${{ needs.config.outputs.rpm-signed }}
-      artifact-name-public-keys: ${{ needs.config.outputs.keys-public }}
-
-  release:
-    needs: [config, rpmsign]
-    permissions:
-      contents: write   # create the GitHub Release and upload artifacts
-    uses: OpenCHAMI/github-actions/.github/workflows/release-signed-artifacts.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
-    with:
-      artifact-name-signed-rpms: ${{ needs.config.outputs.rpm-signed }}
-      artifact-name-public-keys: ${{ needs.config.outputs.keys-public }}
-      release-draft: true
-
   publish:
-    needs: release
+    if: ${{ github.event_name == 'push' }}
+    needs: [goreleaser, validate]
     permissions:
       contents: write   # publish the draft GitHub Release
-    uses: OpenCHAMI/github-actions/.github/workflows/publish-release.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
+    uses: OpenCHAMI/github-actions/.github/workflows/publish-release.yml@5b8f3decfae1c29ef4004a6f49f1593d25eccc95 # experimental: github-actions v4.0 pre-release (seantronsen/feat/redesign-deployment)

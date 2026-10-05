@@ -1,6 +1,12 @@
 # SPDX-FileCopyrightText: 2026 OpenCHAMI Contributors
 # SPDX-License-Identifier: MIT
 #
+# ############################################################################
+# #  DEPRECATED: the coresmd-quadlet rpm and deb are built by GoReleaser
+# #  (nfpms in .goreleaser.yml). This spec and `make rpm-build` are no longer
+# #  used by CI and will be removed; keep changes in .goreleaser.yml.
+# ############################################################################
+#
 # See `make rpm-build` and docs/RPM_PACKAGING.md for the tag-to-version
 # mapping and how the packaged quadlet's image tag is pinned to it.
 

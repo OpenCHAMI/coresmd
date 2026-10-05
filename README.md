@@ -8,7 +8,7 @@ SPDX-License-Identifier: MIT
 # CoreSMD - Connect CoreDHCP/CoreDNS to SMD
 
 [![Latest release](https://img.shields.io/github/v/release/OpenCHAMI/coresmd)](https://github.com/OpenCHAMI/coresmd/releases/latest)
-[![Test](https://github.com/OpenCHAMI/coresmd/actions/workflows/test.yml/badge.svg)](https://github.com/OpenCHAMI/coresmd/actions/workflows/test.yml)
+[![Test](https://github.com/OpenCHAMI/coresmd/actions/workflows/test-unit-go.yml/badge.svg)](https://github.com/OpenCHAMI/coresmd/actions/workflows/test-unit-go.yml)
 [![Coverage](https://coveralls.io/repos/github/OpenCHAMI/coresmd/badge.svg?branch=main)](https://coveralls.io/github/OpenCHAMI/coresmd?branch=main)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/OpenCHAMI/coresmd/badge)](https://scorecard.dev/viewer/?uri=github.com/OpenCHAMI/coresmd)
 
@@ -18,8 +18,8 @@ SPDX-License-Identifier: MIT
 **Build quality**
 
 [![Release with GoReleaser](https://github.com/OpenCHAMI/coresmd/actions/workflows/release.yml/badge.svg)](https://github.com/OpenCHAMI/coresmd/actions/workflows/release.yml)
-[![Build](https://github.com/OpenCHAMI/coresmd/actions/workflows/build.yml/badge.svg)](https://github.com/OpenCHAMI/coresmd/actions/workflows/build.yml)
-[![Lint](https://github.com/OpenCHAMI/coresmd/actions/workflows/lint.yml/badge.svg)](https://github.com/OpenCHAMI/coresmd/actions/workflows/lint.yml)
+[![Build](https://github.com/OpenCHAMI/coresmd/actions/workflows/build-check.yml/badge.svg)](https://github.com/OpenCHAMI/coresmd/actions/workflows/build-check.yml)
+[![Lint](https://github.com/OpenCHAMI/coresmd/actions/workflows/lint-go.yml/badge.svg)](https://github.com/OpenCHAMI/coresmd/actions/workflows/lint-go.yml)
 [![REUSE compliance check](https://github.com/OpenCHAMI/coresmd/actions/workflows/reuse.yaml/badge.svg)](https://github.com/OpenCHAMI/coresmd/actions/workflows/reuse.yaml)
 
 **Security**
@@ -133,11 +133,13 @@ make GORELEASER_OPTS='--clean --snapshot --skip publish' goreleaser-release
 
 #### Running Goreleaser Manually
 
-If running Goreleaser manually, ensure the following environment variables are set in order to include build metadata:
+If running Goreleaser manually, ensure the following environment variables are set (the config references all of them):
 
 - **BUILD_HOST**: The hostname of the machine where the build is performed.
 - **GO_VERSION**: The version of Go used for the build.
 - **BUILD_USER**: The username of the person or system performing the build.
+- **IS_PR_BUILD**: `true` for PR-style builds (no GitHub release, no `latest`/semver image tags), otherwise `false`.
+- **GPG_KEY_PATH**: Path to a GPG private key for signing the RPM, or empty to build it unsigned.
 
 You can set them with:
 
@@ -145,9 +147,11 @@ You can set them with:
 export BUILD_HOST=$(hostname)
 export GO_VERSION=$(go version | awk '{print $3}')
 export BUILD_USER=$(whoami)
+export IS_PR_BUILD=false
+export GPG_KEY_PATH=
 ```
 
-To build binaries and containers for all supported architectures:
+To build binaries, containers, and the `coresmd-quadlet` rpm/deb packages for all supported architectures:
 
 ```bash
 goreleaser release --clean --snapshot --skip publish
