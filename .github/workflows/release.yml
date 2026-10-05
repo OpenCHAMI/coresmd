@@ -12,10 +12,7 @@ on:
       - v*
 
 permissions:
-  contents: write
-  packages: write
-  id-token: write
-  attestations: write
+  contents: read   # baseline; jobs that need more request it below
 
 jobs:
 
@@ -35,6 +32,11 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   build-goreleaser:
+    permissions:
+      contents: write      # release creation, uploading assets
+      packages: write      # image push, container provenance
+      id-token: write      # Sigstore signing (attest-build-provenance)
+      attestations: write  # build provenance attestations
     uses: OpenCHAMI/github-actions/.github/workflows/build-publish-container-goreleaser.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
     with:
       build-deps: gcc-aarch64-linux-gnu libc6-dev-arm64-cross
@@ -58,14 +60,13 @@ jobs:
   rpmbuild:
     needs: [config, build-goreleaser]
     uses: OpenCHAMI/github-actions/.github/workflows/build-rpm-quadlet.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
-    secrets: inherit
     with:
       artifact-name-unsigned-rpms: ${{ needs.config.outputs.rpm-unsigned }}
 
   rpmsign:
     needs: [config, rpmbuild]
     uses: OpenCHAMI/github-actions/.github/workflows/gpg-sign-artifacts.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
-    secrets: inherit
+    secrets: inherit  # zizmor: ignore[secrets-inherit] gpg-sign-artifacts reads GPG secrets it doesn't declare
     with:
       artifact-name-unsigned-rpms: ${{ needs.config.outputs.rpm-unsigned }}
       artifact-name-signed-rpms: ${{ needs.config.outputs.rpm-signed }}
@@ -73,8 +74,9 @@ jobs:
 
   release:
     needs: [config, rpmsign]
+    permissions:
+      contents: write   # create the GitHub Release and upload artifacts
     uses: OpenCHAMI/github-actions/.github/workflows/release-signed-artifacts.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
-    secrets: inherit
     with:
       artifact-name-signed-rpms: ${{ needs.config.outputs.rpm-signed }}
       artifact-name-public-keys: ${{ needs.config.outputs.keys-public }}
@@ -82,5 +84,6 @@ jobs:
 
   publish:
     needs: release
+    permissions:
+      contents: write   # publish the draft GitHub Release
     uses: OpenCHAMI/github-actions/.github/workflows/publish-release.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
-    secrets: inherit
