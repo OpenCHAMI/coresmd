@@ -7,7 +7,7 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
-      pr_number:
+      pr-number:
         description: 'PR Number to build (optional, for manual PR builds)'
         required: false
         type: string
@@ -35,27 +35,39 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   build-goreleaser:
-    uses: OpenCHAMI/github-actions/.github/workflows/build-publish-container-goreleaser.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
+    uses: OpenCHAMI/github-actions/.github/workflows/build-publish-container-goreleaser.yml@c44e2510cff44f6141d997fb849d5ccf2f010dcc # experimental: github-actions v3.12 pre-release (seantronsen/chore/cleanup)
     with:
-      build_deps: gcc-aarch64-linux-gnu libc6-dev-arm64-cross
-      cgo_enabled: 1
-      is_pr_build: true
-      go_version_file: go.mod
-      registry_subject_name: ghcr.io/openchami/coresmd
-      pr_number: ${{ inputs.pr_number || github.event.pull_request.number || 0 }}
+      build-deps: gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+      cgo-enabled: 1
+      is-pr-build: true
+      go-version-file: go.mod
+      registry-subject-name: ghcr.io/openchami/coresmd
+      pr-number: ${{ inputs.pr-number || github.event.pull_request.number || 0 }}
+
+  trivy:
+    # Fork PRs build but don't push, so there is no image to scan.
+    needs: [build-goreleaser]
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    uses: OpenCHAMI/github-actions/.github/workflows/trivy-image-scan.yml@c44e2510cff44f6141d997fb849d5ccf2f010dcc # experimental: github-actions v3.12 pre-release (seantronsen/chore/cleanup)
+    permissions:
+      contents: read          # baseline for checkout
+      security-events: write  # SARIF upload to GHAS
+    with:
+      image-ref: ghcr.io/openchami/coresmd:pr-${{ inputs.pr-number || github.event.pull_request.number || 0 }}
+      exit-code: '0'  # report only until the baseline is reviewed
 
   build-makefile-binaries:
     runs-on: ubuntu-slim
     timeout-minutes: 15
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-tags: 1
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v7.0.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
@@ -72,7 +84,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-tags: 1
           fetch-depth: 0
@@ -94,14 +106,14 @@ jobs:
 
   rpmbuild:
     needs: [config, build]
-    uses: OpenCHAMI/github-actions/.github/workflows/build-rpm-quadlet.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
+    uses: OpenCHAMI/github-actions/.github/workflows/build-rpm-quadlet.yml@c44e2510cff44f6141d997fb849d5ccf2f010dcc # experimental: github-actions v3.12 pre-release (seantronsen/chore/cleanup)
     secrets: inherit
     with:
       artifact-name-unsigned-rpms: ${{ needs.config.outputs.rpm-unsigned }}
 
   rpmsign:
     needs: [config, rpmbuild]
-    uses: OpenCHAMI/github-actions/.github/workflows/gpg-sign-artifacts.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
+    uses: OpenCHAMI/github-actions/.github/workflows/gpg-sign-artifacts.yml@c44e2510cff44f6141d997fb849d5ccf2f010dcc # experimental: github-actions v3.12 pre-release (seantronsen/chore/cleanup)
     secrets: inherit
     with:
       artifact-name-unsigned-rpms: ${{ needs.config.outputs.rpm-unsigned }}
@@ -110,7 +122,7 @@ jobs:
 
   rpmvalidate:
     needs: [config, rpmsign]
-    uses: OpenCHAMI/github-actions/.github/workflows/validate-rpm-quadlet.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
+    uses: OpenCHAMI/github-actions/.github/workflows/validate-rpm-quadlet.yml@c44e2510cff44f6141d997fb849d5ccf2f010dcc # experimental: github-actions v3.12 pre-release (seantronsen/chore/cleanup)
     secrets: inherit
     with:
       artifact-name-signed-rpms:   ${{ needs.config.outputs.rpm-signed }}

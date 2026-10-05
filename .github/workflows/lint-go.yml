@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-name: lint
+name: lint-go
 on:
   pull_request:
   push:
@@ -14,11 +14,11 @@ permissions:
 
 jobs:
   check:
-    uses: OpenCHAMI/github-actions/.github/workflows/lint-go.yml@8143942058adef1ce81a96a11ae9074358df4fbd # v3.11
+    uses: OpenCHAMI/github-actions/.github/workflows/lint-go.yml@c44e2510cff44f6141d997fb849d5ccf2f010dcc # experimental: github-actions v3.12 pre-release (seantronsen/chore/cleanup)
     with:
-      go_version_file: go.mod
+      go-version-file: go.mod
 
-  lint:
+  lint-go:
     if: ${{ always() }}
     needs: [check]
     runs-on: ubuntu-slim
