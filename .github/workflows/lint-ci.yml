@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: © 2026 OpenCHAMI a Series of LF Projects, LLC
+#
+# SPDX-License-Identifier: MIT
+
+name: lint-ci
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    uses: OpenCHAMI/github-actions/.github/workflows/lint-ci.yml@c44e2510cff44f6141d997fb849d5ccf2f010dcc # experimental: github-actions v3.12 pre-release (seantronsen/chore/cleanup)
+    permissions:
+      contents: read          # baseline for checkout
+      security-events: write  # zizmor SARIF upload to GHAS
+
+  lint-ci:
+    if: ${{ always() }}
+    needs: [check]
+    runs-on: ubuntu-slim
+    steps:
+      - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+        with: { jobs: "${{ toJSON(needs) }}" }
