@@ -5,7 +5,7 @@
 
 module github.com/openchami/coresmd
 
-go 1.26.7
+go 1.27.1
 
 require (
 	github.com/coredhcp/coredhcp v0.0.0-20250927164030-d2ed887fca9b
