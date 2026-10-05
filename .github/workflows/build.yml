@@ -35,7 +35,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   build-goreleaser:
-    uses: OpenCHAMI/github-actions/.github/workflows/build-publish-container-goreleaser.yml@46b914cb1c1ad9fa4838a09a5f888135cdba9d06 # experimental: github-actions v4.0 pre-release (seantronsen/chore/cleanup)
+    uses: OpenCHAMI/github-actions/.github/workflows/build-publish-container-goreleaser.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
     with:
       build-deps: gcc-aarch64-linux-gnu libc6-dev-arm64-cross
       cgo-enabled: 1
@@ -48,7 +48,7 @@ jobs:
     # Fork PRs build but don't push, so there is no image to scan.
     needs: [build-goreleaser]
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-    uses: OpenCHAMI/github-actions/.github/workflows/trivy-image-scan.yml@46b914cb1c1ad9fa4838a09a5f888135cdba9d06 # experimental: github-actions v4.0 pre-release (seantronsen/chore/cleanup)
+    uses: OpenCHAMI/github-actions/.github/workflows/trivy-image-scan.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
     permissions:
       contents: read          # baseline for checkout
       security-events: write  # SARIF upload to GHAS
@@ -106,14 +106,14 @@ jobs:
 
   rpmbuild:
     needs: [config, build]
-    uses: OpenCHAMI/github-actions/.github/workflows/build-rpm-quadlet.yml@46b914cb1c1ad9fa4838a09a5f888135cdba9d06 # experimental: github-actions v4.0 pre-release (seantronsen/chore/cleanup)
+    uses: OpenCHAMI/github-actions/.github/workflows/build-rpm-quadlet.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
     secrets: inherit
     with:
       artifact-name-unsigned-rpms: ${{ needs.config.outputs.rpm-unsigned }}
 
   rpmsign:
     needs: [config, rpmbuild]
-    uses: OpenCHAMI/github-actions/.github/workflows/gpg-sign-artifacts.yml@46b914cb1c1ad9fa4838a09a5f888135cdba9d06 # experimental: github-actions v4.0 pre-release (seantronsen/chore/cleanup)
+    uses: OpenCHAMI/github-actions/.github/workflows/gpg-sign-artifacts.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
     secrets: inherit
     with:
       artifact-name-unsigned-rpms: ${{ needs.config.outputs.rpm-unsigned }}
@@ -122,7 +122,7 @@ jobs:
 
   rpmvalidate:
     needs: [config, rpmsign]
-    uses: OpenCHAMI/github-actions/.github/workflows/validate-rpm-quadlet.yml@46b914cb1c1ad9fa4838a09a5f888135cdba9d06 # experimental: github-actions v4.0 pre-release (seantronsen/chore/cleanup)
+    uses: OpenCHAMI/github-actions/.github/workflows/validate-rpm-quadlet.yml@0c9d3259ca2dcc8bb93508ab70b7245ff6575b25 # experimental: github-actions v4.0 pre-release (seantronsen/feat/workflow-ports)
     secrets: inherit
     with:
       artifact-name-signed-rpms:   ${{ needs.config.outputs.rpm-signed }}
