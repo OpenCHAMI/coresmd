@@ -73,7 +73,7 @@ jobs:
       gpg-key-passphrase: ''
 
   validate:
-    # PR builds produce no packages (they're validated in build-check).
+    # PR builds produce no packages (they're validated in build.yml).
     if: ${{ github.event_name == 'push' }}
     needs: goreleaser
     uses: OpenCHAMI/github-actions/.github/workflows/validate-packages.yml@5b8f3decfae1c29ef4004a6f49f1593d25eccc95 # experimental: github-actions v4.0 pre-release (seantronsen/feat/redesign-deployment)

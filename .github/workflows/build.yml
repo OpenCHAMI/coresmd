@@ -2,11 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
-name: build-check
+name: build
 
-# Proves everything builds and packages correctly, publishing nothing: Make
-# sanity builds gate a GoReleaser snapshot build, whose rpm/deb packages are
-# then validated. Read-only, so it also runs for fork PRs. PR images are
+# Build check: proves everything builds and packages correctly, publishing
+# nothing. Make sanity builds gate a GoReleaser snapshot build, whose rpm/deb
+# packages are then validated. Read-only, so it also runs for fork PRs. The
+# `build` job is the required status check. PR images and releases are
 # published by release.yml.
 
 on:

@@ -2,7 +2,11 @@
 #
 # SPDX-License-Identifier: MIT
 
-name: lint-ci
+name: lint
+
+# All linters, gated by one job: the `lint` job is the required status check
+# and passes only if every lint job passes.
+
 on:
   pull_request:
   push:
@@ -13,15 +17,20 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  lint-go:
+    uses: OpenCHAMI/github-actions/.github/workflows/lint-go.yml@5b8f3decfae1c29ef4004a6f49f1593d25eccc95 # experimental: github-actions v4.0 pre-release (seantronsen/feat/redesign-deployment)
+    with:
+      go-version-file: go.mod
+
+  lint-ci:
     uses: OpenCHAMI/github-actions/.github/workflows/lint-ci.yml@5b8f3decfae1c29ef4004a6f49f1593d25eccc95 # experimental: github-actions v4.0 pre-release (seantronsen/feat/redesign-deployment)
     permissions:
       contents: read          # baseline for checkout
       security-events: write  # zizmor SARIF upload to GHAS
 
-  lint-ci:
+  lint:
     if: ${{ always() }}
-    needs: [check]
+    needs: [lint-go, lint-ci]
     runs-on: ubuntu-slim
     steps:
       - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
