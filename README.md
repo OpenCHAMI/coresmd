@@ -133,11 +133,13 @@ make GORELEASER_OPTS='--clean --snapshot --skip publish' goreleaser-release
 
 #### Running Goreleaser Manually
 
-If running Goreleaser manually, ensure the following environment variables are set in order to include build metadata:
+If running Goreleaser manually, ensure the following environment variables are set (the config references all of them):
 
 - **BUILD_HOST**: The hostname of the machine where the build is performed.
 - **GO_VERSION**: The version of Go used for the build.
 - **BUILD_USER**: The username of the person or system performing the build.
+- **IS_PR_BUILD**: `true` for PR-style builds (no GitHub release, no `latest`/semver image tags), otherwise `false`.
+- **GPG_KEY_PATH**: Path to a GPG private key for signing the RPM, or empty to build it unsigned.
 
 You can set them with:
 
@@ -145,9 +147,11 @@ You can set them with:
 export BUILD_HOST=$(hostname)
 export GO_VERSION=$(go version | awk '{print $3}')
 export BUILD_USER=$(whoami)
+export IS_PR_BUILD=false
+export GPG_KEY_PATH=
 ```
 
-To build binaries and containers for all supported architectures:
+To build binaries, containers, and the `coresmd-quadlet` rpm/deb packages for all supported architectures:
 
 ```bash
 goreleaser release --clean --snapshot --skip publish

@@ -20,6 +20,8 @@ CONTAINER_PROG ?= $(shell command -v docker 2>/dev/null)
 
 # Allow override for PR builds in goreleaser
 IS_PR_BUILD ?= false
+# Package signing key for goreleaser (nfpm key_file); unsigned when empty.
+GPG_KEY_PATH ?=
 
 INSTALL_PROGRAM ?= $(INSTALL) -Dm755
 INSTALL_DATA    ?= $(INSTALL) -Dm644
@@ -79,6 +81,18 @@ BUILDHOST     := $(shell $(HOSTCMD))
 BUILDUSER     := $(shell whoami)
 CONTAINER_TAG ?= latest
 FQCN          ?= ghcr.io/openchami/$(NAME):$(CONTAINER_TAG)
+
+# RPM version/release: strip the leading 'v' and drop git-describe's
+# '-N-gHASH[-dirty]' suffix (hyphens aren't allowed in an RPM Version
+# field anyway). An exact tag like v0.1.2 becomes 0.1.2.
+RPMBUILD    ?= $(shell command -v rpmbuild 2>/dev/null)
+RPM_VERSION ?= $(shell echo "$(VERSION)" | sed -e 's/^v//' -e 's/-.*//')
+RPM_RELEASE ?= 1
+RPM_NAME    ?= $(NAME)-quadlet
+RPM_TOPDIR  ?= $(CURDIR)/dist/rpmbuild
+RPM_SRCDIR  := $(RPM_TOPDIR)/SOURCES/$(RPM_NAME)-$(RPM_VERSION)
+QUADLET_DIR ?= build/quadlet
+IMAGE_TAG   ?= $(TAG)
 LDFLAGS := -s \
 	   -X '$(IMPORT)internal/version.Version=$(VERSION)' \
 	   -X '$(IMPORT)internal/version.Tag=$(TAG)' \
@@ -138,6 +152,7 @@ goreleaser-build: ## Run `goreleaser build` (accepts GORELEASER_OPTS)
 		BUILD_HOST=$(BUILDHOST) \
 		BUILD_USER=$(BUILDUSER) \
 		IS_PR_BUILD=$(IS_PR_BUILD) \
+		GPG_KEY_PATH=$(GPG_KEY_PATH) \
 		$(GORELEASER) build $(GORELEASER_OPTS)
 
 .PHONY: goreleaser-release
@@ -149,11 +164,43 @@ goreleaser-release: ## Run `goreleaser release` (accepts GORELEASER_OPTS)
 		BUILD_HOST=$(BUILDHOST) \
 		BUILD_USER=$(BUILDUSER) \
 		IS_PR_BUILD=$(IS_PR_BUILD) \
+		GPG_KEY_PATH=$(GPG_KEY_PATH) \
 		$(GORELEASER) release $(GORELEASER_OPTS)
 
 .PHONY: goreleaser-clean
 goreleaser-clean: ## Clean Goreleaser files (remove dist/)
 	$(RM) -rf dist/
+
+.PHONY: rpm-build
+rpm-build: ## DEPRECATED (use goreleaser): Build the CoreSMD quadlet RPM from the spec (accepts VERSION, RPM_VERSION, RPM_RELEASE, RPM_TOPDIR)
+	$(call require-command-shell,$(RPMBUILD),rpmbuild)
+	$(RM) -rf $(RPM_TOPDIR)
+	mkdir -p $(RPM_SRCDIR)/LICENSES
+	cp -rL packaging/rpm-quadlet/systemd/* $(RPM_SRCDIR)/
+	cp -rL packaging/rpm-quadlet/configs/* $(RPM_SRCDIR)/
+	cp LICENSES/MIT.txt $(RPM_SRCDIR)/LICENSES/
+	tar -C $(RPM_TOPDIR)/SOURCES -czf $(RPM_TOPDIR)/SOURCES/$(RPM_NAME)-$(RPM_VERSION).tar.gz \
+		$(RPM_NAME)-$(RPM_VERSION)
+	$(RPMBUILD) --define "_topdir $(RPM_TOPDIR)" \
+		--define "version $(RPM_VERSION)" \
+		--define "rel $(RPM_RELEASE)" \
+		-bb packaging/rpm-quadlet/$(RPM_NAME).spec
+	@echo "Built: $(RPM_TOPDIR)/RPMS/noarch/$$(ls $(RPM_TOPDIR)/RPMS/noarch)"
+
+.PHONY: rpm-clean
+rpm-clean: ## Remove local RPM build artifacts
+	$(RM) -rf $(RPM_TOPDIR)
+
+.PHONY: quadlet-render
+quadlet-render: ## Render quadlet units with the image tag pinned for packaging (accepts IMAGE_TAG, QUADLET_DIR)
+	mkdir -p $(QUADLET_DIR)
+	for f in coresmd-coredhcp coresmd-coredns; do \
+		if ! grep -q '@IMAGE_TAG@' packaging/common/systemd/$$f.container; then \
+			echo "error: @IMAGE_TAG@ placeholder missing from $$f.container" >&2; \
+			exit 1; \
+		fi; \
+		sed 's|@IMAGE_TAG@|$(IMAGE_TAG)|' packaging/common/systemd/$$f.container > $(QUADLET_DIR)/$$f.container; \
+	done
 
 .PHONY: reuse
 reuse: ## Check REUSE compliance

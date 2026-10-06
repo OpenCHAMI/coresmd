@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2026 OpenCHAMI Contributors
+# SPDX-License-Identifier: MIT
+
+[Unit]
+Description=The %N container
+Wants=haproxy.service
+After=haproxy.service
+PartOf=openchami.target
+
+[Container]
+ContainerName=%N
+HostName=%N
+Image=ghcr.io/openchami/coresmd:@IMAGE_TAG@
+Exec=/coredns
+
+[Service]
+Restart=always

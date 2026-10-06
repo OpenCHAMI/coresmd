@@ -5,31 +5,32 @@
 
 name: test
 
-permissions:
-  contents: read
+# All tests, gated by one job: the `test` job is the required status check
+# and passes only if every test job passes. Unit tests also upload coverage to
+# Coveralls (README badge).
 
 on:
+  pull_request:
   push:
     branches:
       - main
-  pull_request:
+
+permissions:
+  contents: read
+  packages: read
 
 jobs:
+  test-unit-go:
+    uses: OpenCHAMI/github-actions/.github/workflows/test-unit-go.yml@5b8f3decfae1c29ef4004a6f49f1593d25eccc95 # experimental: github-actions v4.0 pre-release (seantronsen/feat/redesign-deployment)
+    with:
+      go-version-file: go.mod
+      test-args: -v -covermode=atomic ./...
+      coverage: true
+
   test:
-    name: test
+    if: ${{ always() }}
+    needs: [test-unit-go]
     runs-on: ubuntu-slim
-    timeout-minutes: 15
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-        with:
-          fetch-tags: 1
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@v7.0.0
-        with:
-          go-version-file: go.mod
-
-      - name: Run Go unit tests
-        run: make test
+      - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+        with: { jobs: "${{ toJSON(needs) }}" }

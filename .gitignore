@@ -9,6 +9,7 @@
 .vscode
 .idea
 dist/
+build/quadlet/
 coverage.out
 
 # Binaries

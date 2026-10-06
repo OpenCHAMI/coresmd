@@ -2,20 +2,21 @@
 #
 # SPDX-License-Identifier: MIT
 
-name: reuse
+name: dependency-review
 on:
   pull_request:
-  push:
-    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
   check:
-    uses: OpenCHAMI/github-actions/.github/workflows/reuse.yml@5b8f3decfae1c29ef4004a6f49f1593d25eccc95 # experimental: github-actions v4.0 pre-release (seantronsen/feat/redesign-deployment)
+    uses: OpenCHAMI/github-actions/.github/workflows/dependency-review.yml@5b8f3decfae1c29ef4004a6f49f1593d25eccc95 # experimental: github-actions v4.0 pre-release (seantronsen/feat/redesign-deployment)
+    permissions:
+      contents: read        # baseline for checkout
+      pull-requests: write  # summary comment on the PR
 
-  reuse:
+  dependency-review:
     if: ${{ always() }}
     needs: [check]
     runs-on: ubuntu-slim

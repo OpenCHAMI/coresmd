@@ -3,112 +3,34 @@
 # SPDX-License-Identifier: MIT
 
 name: build
+
+# Build check: proves everything builds and packages correctly, publishing
+# nothing. Make sanity builds gate a GoReleaser snapshot build, whose rpm/deb
+# packages are then validated. Read-only, so it also runs for fork PRs. The
+# `build` job is the required status check. PR images and releases are
+# published by release.yml.
+
 on:
   pull_request:
   workflow_dispatch:
-    inputs:
-      pr_number:
-        description: 'PR Number to build (optional, for manual PR builds)'
-        required: false
-        type: string
 
 permissions:
-  contents: write # For creating temporary local Git tags
-  packages: write # For pushing PR containers
+  contents: read
 
 jobs:
-  build-goreleaser:
-    # GoReleaser requires Docker Buildx, which is unavailable on the
-    # unprivileged ubuntu-slim runner.
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - name: Install build dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y --no-install-recommends \
-            gcc-aarch64-linux-gnu \
-            libc6-dev-arm64-cross
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
-        with:
-          fetch-tags: 1
-          fetch-depth: 0
-          ref: "${{ inputs.pr_number != '' && format('refs/pull/{0}/head', inputs.pr_number) || '' }}"
-
-      - name: Set up Go
-        uses: actions/setup-go@v7.0.0
-        with:
-          go-version-file: go.mod
-
-      - name: Create tag for PR build
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          PR_NUM="${{ github.event.number }}"
-          if [[ "${{ inputs.pr_number }}" != "" ]]; then
-            PR_NUM="${{ inputs.pr_number }}"
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            PR_NUM="manual-${{ github.run_number }}"
-          fi
-          git tag -f -a "v0.0.0-pr-${PR_NUM}" -m "pr-${PR_NUM} Build"
-          echo "DOCKER_TAG=pr-${PR_NUM}" >> "${GITHUB_ENV}"
-
-      - name: Set build environment variables
-        run: |
-          {
-            echo "GO_VERSION=$(go version | awk '{print $3}')"
-            echo "BUILD_HOST=$(hostname)"
-            echo "BUILD_USER=$(whoami)"
-            echo "CGO_ENABLED=1"
-            echo "IS_PR_BUILD=true"
-          } >> "${GITHUB_ENV}"
-
-      - name: Check if fork PR
-        run: |
-          if [[ "${{ github.event_name }}" == "pull_request" && \
-                "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
-            echo "SKIP_CONTAINER_PUBLISH=true" >> "${GITHUB_ENV}"
-            echo "::warning title=Fork PR - Container Publish Skipped::Containers will be built but not published for fork PRs due to GitHub security restrictions."
-          else
-            echo "SKIP_CONTAINER_PUBLISH=false" >> "${GITHUB_ENV}"
-          fi
-
-      - name: GHCR login
-        if: env.SKIP_CONTAINER_PUBLISH == 'false'
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build with GoReleaser
-        uses: goreleaser/goreleaser-action@v7
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          version: '~> v2'
-          args: release --clean --skip announce,validate${{ env.SKIP_CONTAINER_PUBLISH == 'true' && ',publish' || '' }}
-
-  build-make-binaries:
+  make-binaries:
     runs-on: ubuntu-slim
     timeout-minutes: 15
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-tags: 1
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7.0.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
@@ -118,33 +40,68 @@ jobs:
       - name: Build with Make
         run: make
 
-  build-make-container-multistage:
+  make-container:
     # Container builds require a Docker daemon, which is unavailable on the
     # unprivileged ubuntu-slim runner.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-tags: 1
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Build container from source using multi-stage build
         run: make container
 
+  goreleaser:
+    needs: [make-binaries, make-container]
+    uses: OpenCHAMI/github-actions/.github/workflows/build-check-goreleaser.yml@5b8f3decfae1c29ef4004a6f49f1593d25eccc95 # experimental: github-actions v4.0 pre-release (seantronsen/feat/redesign-deployment)
+    with:
+      build-deps: gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+      cgo-enabled: 1
+      go-version-file: go.mod
+
+  validate:
+    needs: goreleaser
+    uses: OpenCHAMI/github-actions/.github/workflows/validate-packages.yml@5b8f3decfae1c29ef4004a6f49f1593d25eccc95 # experimental: github-actions v4.0 pre-release (seantronsen/feat/redesign-deployment)
+    with:
+      packages: |
+        - name: coresmd-quadlet*.rpm
+          files:
+            - /etc/openchami
+            - /etc/openchami/configs
+            - /etc/openchami/configs/coredhcp.yaml
+            - /etc/openchami/configs/Corefile
+            - /usr/share/containers/systemd/coresmd-.container.d
+            - /usr/share/containers/systemd/coresmd-.container.d/10-defaults-shared.conf
+            - /usr/share/containers/systemd/coresmd-coredhcp.container
+            - /usr/share/containers/systemd/coresmd-coredhcp.container.d
+            - /usr/share/containers/systemd/coresmd-coredhcp.container.d/10-defaults-service.conf
+            - /usr/share/containers/systemd/coresmd-coredns.container
+            - /usr/share/containers/systemd/coresmd-coredns.container.d
+            - /usr/share/containers/systemd/coresmd-coredns.container.d/10-defaults-service.conf
+            - /usr/share/licenses/coresmd-quadlet
+            - /usr/share/licenses/coresmd-quadlet/MIT.txt
+        - name: coresmd-quadlet*.deb
+          files:
+            - /etc/openchami/configs/coredhcp.yaml
+            - /etc/openchami/configs/Corefile
+            - /usr/share/containers/systemd/coresmd-.container.d/10-defaults-shared.conf
+            - /usr/share/containers/systemd/coresmd-coredhcp.container
+            - /usr/share/containers/systemd/coresmd-coredhcp.container.d/10-defaults-service.conf
+            - /usr/share/containers/systemd/coresmd-coredns.container
+            - /usr/share/containers/systemd/coresmd-coredns.container.d/10-defaults-service.conf
+            - /usr/share/doc/coresmd-quadlet/copyright
+
+  # Required status check; keep the job name.
   build:
-    name: build
     if: ${{ always() }}
-    needs:
-      - build-goreleaser
-      - build-make-binaries
-      - build-make-container-multistage
+    needs: [make-binaries, make-container, goreleaser, validate]
     runs-on: ubuntu-slim
     timeout-minutes: 5
     steps:
-      - name: Verify build jobs passed
-        run: |
-          [[ "${{ needs.build-goreleaser.result }}" == "success" ]]
-          [[ "${{ needs.build-make-binaries.result }}" == "success" ]]
-          [[ "${{ needs.build-make-container-multistage.result }}" == "success" ]]
+      - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+        with: { jobs: "${{ toJSON(needs) }}" }

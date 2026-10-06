@@ -11,6 +11,9 @@ before:
   - go install github.com/coredhcp/coredhcp/cmds/coredhcp-generator@latest
   - coredhcp-generator -t generator/coredhcp/coredhcp.go.template -f generator/coredhcp/plugins.txt github.com/openchami/coresmd/plugin/coredhcp/coresmd github.com/openchami/coresmd/plugin/coredhcp/bootloop -o build/coredhcp/coredhcp.go
   - go mod tidy
+  # Pin the packaged quadlets to the image this run publishes (:vX.Y.Z on
+  # release, :pr-N on PR builds).
+  - make quadlet-render IMAGE_TAG={{ .Tag }}
 
 builds:
   # CoreDHCP build
@@ -82,8 +85,7 @@ builds:
 
 dockers:
   - image_templates:
-      # For PR builds use custom tag from env, for releases use semantic versioning
-      - &amd64_linux_image "ghcr.io/openchami/{{.ProjectName}}:{{ if eq .Env.IS_PR_BUILD \"true\" }}{{ .Env.DOCKER_TAG }}{{ else }}{{ .Tag }}{{ end }}-amd64"
+      - &amd64_linux_image "ghcr.io/openchami/{{.ProjectName}}:{{ .Tag }}-amd64"
       - "{{ if ne .Env.IS_PR_BUILD \"true\" }}ghcr.io/openchami/{{.ProjectName}}:{{ .Major }}-amd64{{ end }}"
       - "{{ if ne .Env.IS_PR_BUILD \"true\" }}ghcr.io/openchami/{{.ProjectName}}:{{ .Major }}.{{ .Minor }}-amd64{{ end }}"
     use: buildx
@@ -101,7 +103,7 @@ dockers:
       - README.md
 
   - image_templates:
-      - &arm64v8_linux_image "ghcr.io/openchami/{{.ProjectName}}:{{ if eq .Env.IS_PR_BUILD \"true\" }}{{ .Env.DOCKER_TAG }}{{ else }}{{ .Tag }}{{ end }}-arm64"
+      - &arm64v8_linux_image "ghcr.io/openchami/{{.ProjectName}}:{{ .Tag }}-arm64"
       - "{{ if ne .Env.IS_PR_BUILD \"true\" }}ghcr.io/openchami/{{.ProjectName}}:{{ .Major }}-arm64{{ end }}"
       - "{{ if ne .Env.IS_PR_BUILD \"true\" }}ghcr.io/openchami/{{.ProjectName}}:{{ .Major }}.{{ .Minor }}-arm64{{ end }}"
     use: buildx
@@ -125,7 +127,7 @@ docker_manifests:
       - *amd64_linux_image
       - *arm64v8_linux_image
 
-  - name_template: "ghcr.io/openchami/{{.ProjectName}}:{{ if eq .Env.IS_PR_BUILD \"true\" }}{{ .Env.DOCKER_TAG }}{{ else }}{{ .Tag }}{{ end }}"
+  - name_template: "ghcr.io/openchami/{{.ProjectName}}:{{ .Tag }}"
     image_templates:
       - *amd64_linux_image
       - *arm64v8_linux_image
@@ -141,6 +143,92 @@ docker_manifests:
     image_templates:
       - *amd64_linux_image
       - *arm64v8_linux_image
+
+# Quadlet package, built as both rpm and deb. Per-format differences
+# (release, dependency syntax) are under `overrides`; single-format files use
+# `packager:` (overrides.<format>.contents would replace the whole list).
+# Every file AND directory is listed so rpm owns (and removes) it, matching
+# packaging/rpm-quadlet/coresmd-quadlet.spec.
+nfpms:
+  - id: quadlet
+    package_name: coresmd-quadlet
+    meta: true
+    formats: [rpm, deb]
+    # rpm: name-version-release.arch.rpm, deb: name_version-release_arch.deb
+    file_name_template: "{{ .ConventionalFileName }}"
+    homepage: https://github.com/OpenCHAMI/coresmd
+    maintainer: "Devon Bautista <devonb@lanl.gov>"
+    description: Podman Quadlet unit files for running CoreSMD as part of an OpenCHAMI deployment.
+    license: MIT
+    vendor: OpenCHAMI
+    section: admin
+    contents:
+      - dst: /etc/openchami
+        type: dir
+      - dst: /etc/openchami/configs
+        type: dir
+      # Real files, not the packaging/common/configs symlinks: nfpm packages a
+      # symlink as a symlink (rpmbuild's cp -rL dereferenced them).
+      - src: examples/coredhcp/coredhcp.yaml
+        dst: /etc/openchami/configs/coredhcp.yaml
+        type: "config|noreplace"
+      - src: examples/coredns/basic/Corefile
+        dst: /etc/openchami/configs/Corefile
+        type: "config|noreplace"
+      - dst: /usr/share/containers/systemd/coresmd-.container.d
+        type: dir
+      - src: packaging/common/systemd/coresmd-.container.d/10-defaults-shared.conf
+        dst: /usr/share/containers/systemd/coresmd-.container.d/10-defaults-shared.conf
+      - src: build/quadlet/coresmd-coredhcp.container
+        dst: /usr/share/containers/systemd/coresmd-coredhcp.container
+      - dst: /usr/share/containers/systemd/coresmd-coredhcp.container.d
+        type: dir
+      - src: packaging/common/systemd/coresmd-coredhcp.container.d/10-defaults-service.conf
+        dst: /usr/share/containers/systemd/coresmd-coredhcp.container.d/10-defaults-service.conf
+      - src: build/quadlet/coresmd-coredns.container
+        dst: /usr/share/containers/systemd/coresmd-coredns.container
+      - dst: /usr/share/containers/systemd/coresmd-coredns.container.d
+        type: dir
+      - src: packaging/common/systemd/coresmd-coredns.container.d/10-defaults-service.conf
+        dst: /usr/share/containers/systemd/coresmd-coredns.container.d/10-defaults-service.conf
+      - dst: /usr/share/licenses/coresmd-quadlet
+        type: dir
+        packager: rpm
+      - src: LICENSES/MIT.txt
+        dst: /usr/share/licenses/coresmd-quadlet/MIT.txt
+        type: license
+        packager: rpm
+      - src: packaging/deb/copyright
+        dst: /usr/share/doc/coresmd-quadlet/copyright
+        packager: deb
+    scripts:
+      postinstall: packaging/scripts/postinstall.sh
+      preremove: packaging/scripts/preremove.sh
+      postremove: packaging/scripts/postremove.sh
+    overrides:
+      rpm:
+        release: "1.el9"
+        dependencies:
+          - podman >= 5.0.0
+          - systemd
+        suggests:
+          - smd-quadlet >= 2.20.0
+          - tokensmith-quadlet >= 0.4.0
+          - openchami-haproxy-quadlet >= 0.0.1
+      deb:
+        release: "1"
+        dependencies:
+          - podman (>= 5.0.0)
+          - systemd
+        suggests:
+          - smd-quadlet (>= 2.20.0)
+          - tokensmith-quadlet (>= 0.4.0)
+          - openchami-haproxy-quadlet (>= 0.0.1)
+    rpm:
+      signature:
+        # Set by OpenCHAMI/github-actions build-release-goreleaser on tag
+        # builds when a signing key is provided; unsigned when empty.
+        key_file: "{{ .Env.GPG_KEY_PATH }}"
 
 release:
   disable: "{{ if eq .Env.IS_PR_BUILD \"true\" }}true{{ else }}false{{ end }}"
