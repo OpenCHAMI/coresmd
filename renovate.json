@@ -14,6 +14,13 @@
       "rangeStrategy": "bump",
       "minimumReleaseAge": "7 days",
       "minimumGroupSize": 2
+    },
+    {
+      "description": "Pin and update the Wolfi runtime image in Dockerfile",
+      "matchManagers": ["dockerfile"],
+      "matchFileNames": ["Dockerfile"],
+      "matchDepNames": ["docker.io/chainguard/wolfi-base"],
+      "pinDigests": true
     }
   ]
 }
