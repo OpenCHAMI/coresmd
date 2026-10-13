@@ -3,7 +3,8 @@
 #
 # SPDX-License-Identifier: MIT
 
-FROM docker.io/chainguard/wolfi-base:latest
+# The image has no version label; Renovate tracks the latest tag by digest.
+FROM docker.io/chainguard/wolfi-base:latest@sha256:256c88bb066424045021090932d50be93c8e3f2ce3586707702a401b146f3e43
 
 
 # Include curl and tini in the final image.

@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 # Stage 1: Build the binaries
-FROM docker.io/library/golang:alpine AS builder
+FROM docker.io/library/golang:1.27.2-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git make
@@ -11,8 +11,8 @@ RUN apk add --no-cache git make
 # Set working directory
 WORKDIR /build
 
-# Set GOTOOLCHAIN to auto to allow Go to download required version
-ENV GOTOOLCHAIN=auto
+# Use the pinned Go toolchain instead of downloading another version
+ENV GOTOOLCHAIN=local
 
 # Copy source code
 COPY . .

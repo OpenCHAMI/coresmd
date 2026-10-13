@@ -3,5 +3,24 @@
   "extends": [
     "github>OpenCHAMI/.github//renovate-config/default",
     "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "description": "Update Go in go.mod and Dockerfile.build together",
+      "matchManagers": ["gomod", "dockerfile"],
+      "matchDepNames": ["go", "docker.io/library/golang"],
+      "groupName": "Go toolchain",
+      "groupSlug": "go-toolchain",
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "7 days",
+      "minimumGroupSize": 2
+    },
+    {
+      "description": "Pin and update the Wolfi runtime image in Dockerfile",
+      "matchManagers": ["dockerfile"],
+      "matchFileNames": ["Dockerfile"],
+      "matchDepNames": ["docker.io/chainguard/wolfi-base"],
+      "pinDigests": true
+    }
   ]
 }
