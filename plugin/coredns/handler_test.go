@@ -345,6 +345,216 @@ func TestServeDNS_Other_Record_Types(t *testing.T) {
 	}
 }
 
+func TestServeDNS_SOA_Record_Default(t *testing.T) {
+	p := createTestPlugin()
+	mock := &mockHandler{}
+	p.Next = mock
+
+	req := new(dns.Msg)
+	req.SetQuestion("cluster.local.", dns.TypeSOA)
+
+	w := &mockResponseWriter{}
+	rcode, err := p.ServeDNS(context.Background(), w, req)
+	if err != nil {
+		t.Fatalf("ServeDNS failed: %v", err)
+	}
+	if rcode != dns.RcodeSuccess {
+		t.Errorf("Expected rcode %d, got %d", dns.RcodeSuccess, rcode)
+	}
+	if len(w.msg.Answer) != 1 {
+		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
+	}
+
+	soa, ok := w.msg.Answer[0].(*dns.SOA)
+	if !ok {
+		t.Fatal("Answer is not an SOA record")
+	}
+	if soa.Hdr.Name != "cluster.local." {
+		t.Errorf("Expected name cluster.local., got %s", soa.Hdr.Name)
+	}
+	if soa.Ns != "ns.cluster.local." {
+		t.Errorf("Expected NS ns.cluster.local., got %s", soa.Ns)
+	}
+	if soa.Mbox != "hostmaster.cluster.local." {
+		t.Errorf("Expected Mbox hostmaster.cluster.local., got %s", soa.Mbox)
+	}
+	if soa.Serial != 0 {
+		t.Errorf("Expected serial 0, got %d", soa.Serial)
+	}
+
+	if mock.called {
+		t.Error("Expected next plugin not to be called")
+	}
+}
+
+func TestServeDNS_SOA_Record_Custom(t *testing.T) {
+	p := createTestPlugin()
+	p.zones[0].NS = []string{"ns1.example.org.", "ns2.example.org."}
+	p.zones[0].Mailbox = "admin.example.org."
+	p.xfr = &xfrState{serial: 12345}
+	mock := &mockHandler{}
+	p.Next = mock
+
+	req := new(dns.Msg)
+	req.SetQuestion("cluster.local.", dns.TypeSOA)
+
+	w := &mockResponseWriter{}
+	rcode, err := p.ServeDNS(context.Background(), w, req)
+	if err != nil {
+		t.Fatalf("ServeDNS failed: %v", err)
+	}
+	if rcode != dns.RcodeSuccess {
+		t.Errorf("Expected rcode %d, got %d", dns.RcodeSuccess, rcode)
+	}
+	if len(w.msg.Answer) != 1 {
+		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
+	}
+
+	soa, ok := w.msg.Answer[0].(*dns.SOA)
+	if !ok {
+		t.Fatal("Answer is not an SOA record")
+	}
+	if soa.Ns != "ns1.example.org." {
+		t.Errorf("Expected NS ns1.example.org., got %s", soa.Ns)
+	}
+	if soa.Mbox != "admin.example.org." {
+		t.Errorf("Expected Mbox admin.example.org., got %s", soa.Mbox)
+	}
+	if soa.Serial != 12345 {
+		t.Errorf("Expected serial 12345, got %d", soa.Serial)
+	}
+
+	if mock.called {
+		t.Error("Expected next plugin not to be called")
+	}
+}
+
+func TestServeDNS_NS_Record_Default(t *testing.T) {
+	p := createTestPlugin()
+	mock := &mockHandler{}
+	p.Next = mock
+
+	req := new(dns.Msg)
+	req.SetQuestion("cluster.local.", dns.TypeNS)
+
+	w := &mockResponseWriter{}
+	rcode, err := p.ServeDNS(context.Background(), w, req)
+	if err != nil {
+		t.Fatalf("ServeDNS failed: %v", err)
+	}
+	if rcode != dns.RcodeSuccess {
+		t.Errorf("Expected rcode %d, got %d", dns.RcodeSuccess, rcode)
+	}
+	if len(w.msg.Answer) != 1 {
+		t.Fatalf("Expected 1 answer, got %d", len(w.msg.Answer))
+	}
+
+	ns, ok := w.msg.Answer[0].(*dns.NS)
+	if !ok {
+		t.Fatal("Answer is not an NS record")
+	}
+	if ns.Hdr.Name != "cluster.local." {
+		t.Errorf("Expected name cluster.local., got %s", ns.Hdr.Name)
+	}
+	if ns.Ns != "ns.cluster.local." {
+		t.Errorf("Expected NS ns.cluster.local., got %s", ns.Ns)
+	}
+
+	if mock.called {
+		t.Error("Expected next plugin not to be called")
+	}
+}
+
+func TestServeDNS_NS_Record_Multiple(t *testing.T) {
+	p := createTestPlugin()
+	p.zones[0].NS = []string{"ns1.example.org.", "ns2.example.org."}
+	mock := &mockHandler{}
+	p.Next = mock
+
+	req := new(dns.Msg)
+	req.SetQuestion("cluster.local.", dns.TypeNS)
+
+	w := &mockResponseWriter{}
+	rcode, err := p.ServeDNS(context.Background(), w, req)
+	if err != nil {
+		t.Fatalf("ServeDNS failed: %v", err)
+	}
+	if rcode != dns.RcodeSuccess {
+		t.Errorf("Expected rcode %d, got %d", dns.RcodeSuccess, rcode)
+	}
+	if len(w.msg.Answer) != 2 {
+		t.Fatalf("Expected 2 answers, got %d", len(w.msg.Answer))
+	}
+
+	expected := map[string]bool{
+		"ns1.example.org.": false,
+		"ns2.example.org.": false,
+	}
+	for _, rr := range w.msg.Answer {
+		ns, ok := rr.(*dns.NS)
+		if !ok {
+			t.Fatal("Answer is not an NS record")
+		}
+		if _, exists := expected[ns.Ns]; !exists {
+			t.Errorf("Unexpected NS %s", ns.Ns)
+		}
+		expected[ns.Ns] = true
+	}
+	for ns, found := range expected {
+		if !found {
+			t.Errorf("Expected NS %s not found", ns)
+		}
+	}
+
+	if mock.called {
+		t.Error("Expected next plugin not to be called")
+	}
+}
+
+func TestServeDNS_SOA_Record_Unknown_Zone(t *testing.T) {
+	p := createTestPlugin()
+	mock := &mockHandler{}
+	p.Next = mock
+
+	req := new(dns.Msg)
+	req.SetQuestion("other.local.", dns.TypeSOA)
+
+	w := &mockResponseWriter{}
+	_, err := p.ServeDNS(context.Background(), w, req)
+	if err != nil {
+		t.Fatalf("ServeDNS failed: %v", err)
+	}
+
+	if !mock.called {
+		t.Error("Expected next plugin to be called")
+	}
+	if w.msg != nil {
+		t.Error("Expected no response to be written")
+	}
+}
+
+func TestServeDNS_NS_Record_Unknown_Zone(t *testing.T) {
+	p := createTestPlugin()
+	mock := &mockHandler{}
+	p.Next = mock
+
+	req := new(dns.Msg)
+	req.SetQuestion("other.local.", dns.TypeNS)
+
+	w := &mockResponseWriter{}
+	_, err := p.ServeDNS(context.Background(), w, req)
+	if err != nil {
+		t.Fatalf("ServeDNS failed: %v", err)
+	}
+
+	if !mock.called {
+		t.Error("Expected next plugin to be called")
+	}
+	if w.msg != nil {
+		t.Error("Expected no response to be written")
+	}
+}
+
 func TestServeDNS_Empty_Question(t *testing.T) {
 	p := createTestPlugin()
 	mock := &mockHandler{}
