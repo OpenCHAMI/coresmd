@@ -9,7 +9,7 @@ go 1.27.3
 
 require (
 	github.com/coredhcp/coredhcp v0.0.0-20250927164030-d2ed887fca9b
-	github.com/coredns/caddy v1.1.4
+	github.com/coredns/caddy/v2 v2.1.1
 	github.com/coredns/coredns v1.15.0
 	github.com/coredns/rrl v0.0.0-20250915113509-ac1135e077ba
 	github.com/insomniacslk/dhcp v0.0.0-20251020182700-175e84fbb167
