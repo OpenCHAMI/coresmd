@@ -13,7 +13,7 @@ require (
 	github.com/coredns/coredns v1.15.0
 	github.com/coredns/rrl v0.0.0-20250915113509-ac1135e077ba
 	github.com/insomniacslk/dhcp v0.0.0-20251020182700-175e84fbb167
-	github.com/mattn/go-sqlite3 v1.14.52
+	github.com/mattn/go-sqlite3 v1.14.53
 	github.com/miekg/dns v1.1.73
 	github.com/ori-edge/k8s_gateway v0.4.0
 	github.com/pin/tftp/v3 v3.2.0
