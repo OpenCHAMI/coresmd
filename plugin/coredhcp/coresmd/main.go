@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +36,7 @@ type Config struct {
 	// Parsed from configuration file
 	svcBaseURI    *url.URL              // svc_base_uri
 	ipxeURI       *url.URL              // ipxe_uri
+	ztpBoots      []ztpBoot             // ordered ztp_user_class mappings (DHCPv4)
 	caCert        string                // ca_cert
 	cacheValid    *time.Duration        // cache_valid
 	leaseTime     *time.Duration        // lease_time
@@ -62,6 +64,9 @@ func (c Config) String() string {
 	)
 	for _, rule := range c.rules {
 		cfgStr += fmt.Sprintf(" rule=%s", rule)
+	}
+	for _, boot := range c.ztpBoots {
+		cfgStr += fmt.Sprintf(" ztp_user_class=%s,%s", boot.userClass, boot.uri.Redacted())
 	}
 
 	return cfgStr
@@ -253,6 +258,10 @@ func parseConfig(argv ...string) (cfg Config, errs []error) {
 				continue
 			} else {
 				cfg.ipxeURI = ipxeURI
+			}
+		case "ztp_user_class":
+			if err := cfg.addZTPMapping(opt[1]); err != nil {
+				errs = append(errs, fmt.Errorf("non-comment arg %d: invalid ztp_user_class: %w", idx, err))
 			}
 		case "ca_cert":
 			// Simply set if nonempty when trimmed. Checking happens later.
@@ -505,7 +514,13 @@ func Handler4(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
 	}).Info("DHCPv4 assignment")
 
 	// STEP 2: Send boot config
-	if cinfo := req.Options.Get(dhcpv4.OptionUserClassInformation); string(cinfo) != "iPXE" {
+	// UserClass accepts RFC 3004 lists and legacy unprefixed values such as iPXE.
+	classes := req.UserClass()
+	if uri := globalConfig.ztpURI(classes); uri != nil {
+		// A complete URL must not be combined with an earlier TFTP server name.
+		resp.Options.Del(dhcpv4.OptionTFTPServerName)
+		resp.Options.Update(dhcpv4.OptBootFileName(uri.String()))
+	} else if !slices.Contains(classes, "iPXE") {
 		// BOOT STAGE 1: Send iPXE bootloader over TFTP
 		resp, _ = ipxe.ServeIPXEBootloader(log, req, resp)
 	} else {

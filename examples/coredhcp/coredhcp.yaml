@@ -199,6 +199,8 @@ server4:
         svc_base_uri=https://foobar.openchami.cluster
         /* Boot script URI */
         ipxe_uri=http://172.16.0.253:8081/bootscript
+        /* OPTIONAL DHCPv4 ZTP: exact option 77 class followed by a full URL */
+        /* ztp_user_class=NVOS-ZTP,https://ztp.example.test/ztp.json */
         /* OPTIONAL: path to CA trust certificate bundle */
         ca_cert=/root_ca/root_ca.crt
         /* OPTIONAL: duration that component/interface cache is valid (default 30s) */
